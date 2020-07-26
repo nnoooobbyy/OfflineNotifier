@@ -4,6 +4,7 @@ import json
 import asyncio
 import regex as re
 import inspect
+import time
 
 from colorama import init, Fore
 from datetime import datetime
@@ -25,24 +26,24 @@ onlineColor = embeds.Colour.from_rgb(67,181,129)
 offlineColor = embeds.Colour.from_rgb(114,124,138)
 actionQueue = []
 waitTime = 2 # minutes
-liveTime = datetime.now()
+startTime = time.time()
 
 # ----- DEFINITIONS
 # PRINT DEFS
 # failure print
 def fprint(message):
     caller = inspect.stack()[1][3]
-    print(colors['f'] + f"{datetime.now().strftime('%H:%M:%S')} | {caller} | {message}" + colors['n'])
+    print(colors['f'] + f"{time.strftime('%H:%M:%S')} | {caller} | {message}" + colors['n'])
 
 # success print
 def sprint(message):
     caller = inspect.stack()[1][3]
-    print(colors['s'] + f"{datetime.now().strftime('%H:%M:%S')} | {caller} | {message}" + colors['n'])
+    print(colors['s'] + f"{time.strftime('%H:%M:%S')} | {caller} | {message}" + colors['n'])
 
 # neutral print
 def nprint(message):
     caller = inspect.stack()[1][3]
-    print(colors['n'] + f"{datetime.now().strftime('%H:%M:%S')} | {caller} | {message}")
+    print(colors['n'] + f"{time.strftime('%H:%M:%S')} | {caller} | {message}")
 
 # ----- ASYNC DEFS
 # handles message sending
@@ -90,14 +91,16 @@ async def queueHandler():
                         response = embeds.Embed(title="ASSIGNMENT SUCCESSFUL", description=f"```OfflineNotifier assigned to #{bot.get_channel(CID)}```", colour=successColor)
                     await sendMessage(bot.get_channel(CID), response)
 
-                # SET STATUS - [GID, BID, status]
+                # SET STATUS - [GID, BID, status, changeTimestamp]
                 elif action == 'ss':
                     nprint("SET STATUS")
                     GID = str(data[1][0])
                     BID = str(data[1][1])
                     status = data[1][2]
-                    oldStatus = serverJson[GID]['bots'][BID]
-                    serverJson[GID]['bots'][BID] = status
+                    changeTimestamp = data[1][3]
+                    serverJson[GID]['bots'][BID]['status'] = status
+                    if changeTimestamp:
+                        serverJson[GID]['bots'][BID]['timestamp'] = time.time()
                     sprint("set status successful")
 
                 # ADD BOT - [GID, BID]
@@ -105,7 +108,7 @@ async def queueHandler():
                     nprint("ADD BOT")
                     GID = str(data[1][0])
                     BID = str(data[1][1])
-                    serverJson[GID]['bots'][BID] = "unknown"
+                    serverJson[GID]['bots'][BID] = {'status': "unknown", 'timestamp': time.time()}
                     sprint("add bot successful")
 
                 # REMOVE BOT - [GID, BID]
@@ -116,7 +119,7 @@ async def queueHandler():
                     try:
                         del serverJson[GID]['bots'][BID]
                         sprint("remove bot successful")
-                    except:
+                    except KeyError:
                         fprint("remove bot failed | not in list")
 
                 # REMOVE GUILD - [GID]
@@ -126,7 +129,7 @@ async def queueHandler():
                     try:
                         del serverJson[GID]
                         sprint("remove guild successful")
-                    except:
+                    except KeyError:
                         fprint("remove guild failed | not in dict")
 
                 actionQueue.pop(0)
@@ -203,19 +206,34 @@ async def checkOffline():
                     try:
                         status = str(member.status)
                         # if nothing changed, move on
-                        if status == data[GID]['bots'][BID]:
+                        if status == data[GID]['bots'][BID]['status']:
                             continue
-                        await addToQueue('ss', [GID, BID, status])
                         if status == "offline":
                             # BOT NOW OFFLINE
-                            response = embeds.Embed(title=f"{member} is now offline", colour=offlineColor)
+                            await addToQueue('ss', [GID, BID, status, True])
+                            # calculate delta
+                            timeStamp = data[GID]['bots'][BID]['timestamp']
+                            currentTime = time.time()
+                            diff = currentTime - timeStamp
+                            deltaTime = time.gmtime(diff)
+                            # create response
+                            response = embeds.Embed(title=f"{member} is now offline",description=f"```TOTAL UPTIME\n{(deltaTime.tm_yday - 1) * (deltaTime.tm_year - 1969)}D {deltaTime.tm_hour}H {deltaTime.tm_min}M {deltaTime.tm_sec}S```", colour=offlineColor)
                             response.timestamp = datetime.utcnow()
                             await sendMessage(messageChannel, response)
-                        elif data[GID]['bots'][BID] == "offline":
+                        elif data[GID]['bots'][BID]['status'] == "offline":
                             # BOT BACK ONLINE
-                            response = embeds.Embed(title=f"{member} is back online", colour=onlineColor)
+                            await addToQueue('ss', [GID, BID, status, True])
+                            # calculate delta
+                            timeStamp = data[GID]['bots'][BID]['timestamp']
+                            currentTime = time.time()
+                            diff = currentTime - timeStamp
+                            deltaTime = time.gmtime(diff)
+                            # create response
+                            response = embeds.Embed(title=f"{member} is back online", description=f"```TOTAL DOWNTIME\n{(deltaTime.tm_yday - 1) * (deltaTime.tm_year - 1969)}D {deltaTime.tm_hour}H {deltaTime.tm_min}M {deltaTime.tm_sec}S```", colour=onlineColor)
                             response.timestamp = datetime.utcnow()
                             await sendMessage(messageChannel, response)
+                        else:
+                            await addToQueue('ss', [GID, BID, status, False])
                     except KeyError:
                         # ADD NEW BOT TO LIST
                         await addToQueue('ab', [GID, BID])
@@ -231,6 +249,7 @@ async def checkOffline():
 # env variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+inviteLink = os.getenv('INVITE_LINK')
 
 bot = commands.AutoShardedBot(command_prefix='$')
 
@@ -238,8 +257,7 @@ bot = commands.AutoShardedBot(command_prefix='$')
 # triggered when bot is ready
 @bot.event
 async def on_ready():
-    liveTime = datetime.now()
-    sprint(f'{bot.user.name} ready at {liveTime.strftime("%Y-%m-%d %H:%M:%S")}')
+    sprint(f'{bot.user.name} ready at {time.strftime("%m/%d/%Y %H:%M:%S")}')
     # starting async tasks
     await asyncio.gather(
         checkOffline(),
@@ -249,33 +267,31 @@ async def on_ready():
 # triggered when bot connects
 @bot.event
 async def on_connect():
-    liveTime = datetime.now()
-    sprint(f'{bot.user.name} connected to Discord at {liveTime.strftime("%Y-%m-%d %H:%M:%S")}')
+    sprint(f'{bot.user.name} connected to Discord at {time.strftime("%m/%d/%Y %H:%M:%S")}')
     activity = Activity(type=ActivityType.watching, name="soon, please wait")
     await bot.change_presence(status=Status.idle, activity=activity)
 
 # triggered when bot resumes
 @bot.event
 async def on_resumed():
-    liveTime = datetime.now()
-    sprint(f'{bot.user.name} resumed at {liveTime.strftime("%Y-%m-%d %H:%M:%S")}')
+    sprint(f'{bot.user.name} resumed at {time.strftime("%m/%d/%Y %H:%M:%S")}')
 
 # triggered when shard is ready
 @bot.event
 async def on_shard_ready(shard):
-    sprint(f'shard {shard} ready at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+    sprint(f'shard {shard} ready at {time.strftime("%m/%d/%Y %H:%M:%S")}')
 
 # triggered when bot is disconnected
 @bot.event
 async def on_disconnect():
-    fprint(f'{bot.user.name} disconnected from Discord at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+    fprint(f'{bot.user.name} disconnected from Discord at {time.strftime("%m/%d/%Y %H:%M:%S")}')
 
 # #triggered when an exception is raised
 @bot.event
 async def on_error(event, *args, **kwargs):
     with open('err.log', 'a') as f:
         fprint("!!! WARNING !!! exception raised, check err.log for more details")
-        f.write(f'\n-------------------------\nException raised at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n{sys.exc_info()}')
+        f.write(f'\n-------------------------\nException raised at {time.strftime("%m/%d/%Y %H:%M:%S")}\n{sys.exc_info()}')
 
 # triggered when an error occurs in a command
 @bot.event
@@ -355,8 +371,19 @@ async def list(ctx):
     try:
         for BID in serverJson[GID]['bots']:
             botName = bot.get_user(int(BID))
-            status = serverJson[GID]['bots'][BID]
-            response.add_field(name=f"{botName}", value=f"```{status}```")
+            # calculate uptime/downtime
+            timeStamp = serverJson[GID]['bots'][BID]['timestamp']
+            currentTime = time.time()
+            diff = currentTime - timeStamp
+            deltaTime = time.gmtime(diff)
+            # get status
+            status = serverJson[GID]['bots'][BID]['status']
+            #create field
+            if len(response.fields) < 25:
+                response.add_field(name=f"{botName}", value=f"```\nLAST STATUS\n{status}\n{'------' if status.lower() != 'offline' else '--------'}\n{'UPTIME' if status.lower() != 'offline' else 'DOWNTIME'}\n{(deltaTime.tm_yday - 1) * (deltaTime.tm_year - 1969)}D {deltaTime.tm_hour}H {deltaTime.tm_min}M {deltaTime.tm_sec}S```")
+        if len(response.fields) == 25:
+            response.remove_field(24)
+            response.add_field(inline=False, name="CAN ONLY LIST FIRST 24 BOTS", value="```Sorry for the inconvenience```")
     except KeyError:
         response = embeds.Embed(title="LIST FAILED", description="```Bots are not being tracked in this server```", colour=failColor)
     await sendMessage(ctx, response)
@@ -366,7 +393,6 @@ async def list(ctx):
 async def invite(ctx):
     nprint("user requested invite link")
     # variables
-    inviteLink = "https://discord.com/api/oauth2/authorize?client_id=722352429865369663&permissions=75776&scope=bot"
     inviteColor = embeds.Colour.from_rgb(114, 137, 218)
 
     # creating and sending invite
@@ -393,9 +419,9 @@ async def stats(ctx):
             totalBots += 1
 
     # CALCULATE UPTIME
-    currentTime = datetime.now()
-    uptime = (datetime.min + (currentTime - liveTime)).time()
-    uptimeDay = int(currentTime.strftime('%d')) - int(liveTime.strftime('%d'))
+    currentTime = time.time()
+    diff = currentTime - startTime
+    uptime = time.gmtime(diff)
 
     # MAKE EMBED
     statsEmbed = embeds.Embed(title="OfflineNotifier stats", colour=statsColor)
@@ -403,7 +429,7 @@ async def stats(ctx):
     statsEmbed.add_field(name="Total servers", value=f"```{totalServers}```")
     statsEmbed.add_field(name="Active servers", value=f"```{totalActive}```")
     statsEmbed.add_field(name="Bots watching", value=f"```{totalBots}```")
-    statsEmbed.add_field(name="Uptime", value=f"```{uptimeDay} d {uptime.strftime('%H h %M m %S s')}```")
+    statsEmbed.add_field(name="Uptime", value=f"```{(uptime.tm_yday - 1) * (uptime.tm_year - 1969)}D {uptime.tm_hour}H {uptime.tm_min}M {uptime.tm_sec}S```")
     await sendMessage(ctx, statsEmbed)
  
 # starting the bot
