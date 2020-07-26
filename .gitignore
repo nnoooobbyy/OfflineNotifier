@@ -105,6 +105,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# User-only data
+activeServers.json
+
 # Spyder project settings
 .spyderproject
 .spyproject
