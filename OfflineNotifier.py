@@ -25,7 +25,7 @@ failColor = embeds.Colour.from_rgb(224,108,108)
 onlineColor = embeds.Colour.from_rgb(67,181,129)
 offlineColor = embeds.Colour.from_rgb(114,124,138)
 actionQueue = []
-waitTime = 10 # second(s)
+waitTime = 5 # second(s)
 startTime = time.time()
 
 # ----- DEFINITIONS
