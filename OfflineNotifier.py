@@ -138,7 +138,7 @@ async def queueHandler():
             with open('activeServers.json', 'w') as writeFile:
                 json.dump(serverJson, writeFile)
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
 
 # adds actions to the action queue
 async def addToQueue(action, data):
@@ -239,13 +239,6 @@ async def checkOffline():
                         await addToQueue('ab', [GID, BID])
             
         await asyncio.sleep(waitTime)
-        # for i in range(waitTime):
-        #     if waitTime - i == 1:
-        #         activity = Activity(type=ActivityType.watching, name="in less than a minute")
-        #     else:
-        #         activity = Activity(type=ActivityType.watching, name=f"in {waitTime - i} minutes")
-        #     await bot.change_presence(activity=activity)
-        #     await asyncio.sleep(60)
 
 # env variables
 load_dotenv()
