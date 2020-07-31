@@ -25,7 +25,7 @@ failColor = embeds.Colour.from_rgb(224,108,108)
 onlineColor = embeds.Colour.from_rgb(67,181,129)
 offlineColor = embeds.Colour.from_rgb(114,124,138)
 actionQueue = []
-waitTime = 2 # minutes
+waitTime = 10 # second(s)
 startTime = time.time()
 
 # ----- DEFINITIONS
@@ -174,7 +174,7 @@ async def checkOffline():
             for BID in data[GID]['bots']:
                 totalBots += 1
         activity = Activity(type=ActivityType.watching, name=f"{totalBots} bots")
-        await bot.change_presence(status=Status.idle, activity=activity)
+        await bot.change_presence(activity=activity)
 
         # loops through each active server
         for GID in data:
@@ -238,13 +238,14 @@ async def checkOffline():
                         # ADD NEW BOT TO LIST
                         await addToQueue('ab', [GID, BID])
             
-        for i in range(waitTime):
-            if waitTime - i == 1:
-                activity = Activity(type=ActivityType.watching, name="in less than a minute")
-            else:
-                activity = Activity(type=ActivityType.watching, name=f"in {waitTime - i} minutes")
-            await bot.change_presence(activity=activity)
-            await asyncio.sleep(60)
+        await asyncio.sleep(waitTime)
+        # for i in range(waitTime):
+        #     if waitTime - i == 1:
+        #         activity = Activity(type=ActivityType.watching, name="in less than a minute")
+        #     else:
+        #         activity = Activity(type=ActivityType.watching, name=f"in {waitTime - i} minutes")
+        #     await bot.change_presence(activity=activity)
+        #     await asyncio.sleep(60)
 
 # env variables
 load_dotenv()
