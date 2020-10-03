@@ -178,14 +178,16 @@ async def checkOffline():
 
             # checks to see if offlinenotifier is still in guild
             currentGuild = bot.get_guild(int(GID))
-            if not currentGuild and connected:
+            if not currentGuild:
+                if not connected: continue
                 fprint("no longer in guild, removing from dict")
                 await addToQueue('rg', [GID])
                 continue
 
             # checks to see if offlinenotifier is still in channel
             messageChannel = currentGuild.get_channel(data[GID]['channel'])
-            if not messageChannel and connected:
+            if not messageChannel:
+                if not connected: continue
                 fprint("no longer in channel, removing guild from dict")
                 await addToQueue('rg', [GID])
                 continue
