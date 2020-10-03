@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from discord import Activity
 from discord import ActivityType
 from discord import embeds
+from discord import Intents
 from discord import Status
 from discord import errors
 from discord.ext import commands
@@ -24,6 +25,8 @@ successColor = embeds.Colour.from_rgb(118,224,110)
 failColor = embeds.Colour.from_rgb(224,108,108)
 onlineColor = embeds.Colour.from_rgb(67,181,129)
 offlineColor = embeds.Colour.from_rgb(114,124,138)
+
+# variables
 actionQueue = []
 waitTime = 5 # second(s)
 startTime = time.time()
@@ -49,12 +52,12 @@ def nprint(message):
 # handles message sending
 async def sendMessage(location, message):
     try:
-        nprint("sending message")
+        #nprint("sending message")
         if isinstance(message, embeds.Embed):
             await location.send(embed=message)
         else:
             await location.send(f"{message}")
-        sprint("message sent successfully")
+        #sprint("message sent successfully")
     except errors.Forbidden:
         fprint("message failed to send")
 
@@ -71,14 +74,14 @@ async def queueHandler():
                 
                 # ASSIGN CHANNEL - [GID, CID]
                 if action == 'ac':
-                    nprint("ASSIGN CHANNEL")
+                    #nprint("ASSIGN CHANNEL")
                     GID = str(data[1][0])
                     CID = data[1][1]
                     try:
                         if CID != serverJson[GID]['channel']:
                             # CHANGE ASSIGNED CHANNEL
                             serverJson[GID]['channel'] = CID
-                            sprint("assign channel successful")
+                            #sprint("assign channel successful")
                             response = embeds.Embed(title="ASSIGNMENT SUCCESSFUL", description=f"```OfflineNotifier now assigned to #{bot.get_channel(CID)}```", colour=successColor)
                         else:
                             # SAME ASSIGNED CHANNEL
@@ -87,13 +90,13 @@ async def queueHandler():
                     except KeyError:
                         # NEW GUILD
                         serverJson[GID] = {'bots': {}, 'channel': CID}
-                        sprint("assign channel successful | new guild added")
+                        sprint("new guild added")
                         response = embeds.Embed(title="ASSIGNMENT SUCCESSFUL", description=f"```OfflineNotifier assigned to #{bot.get_channel(CID)}```", colour=successColor)
                     await sendMessage(bot.get_channel(CID), response)
 
                 # SET STATUS - [GID, BID, status, changeTimestamp]
                 elif action == 'ss':
-                    nprint("SET STATUS")
+                    #nprint("SET STATUS")
                     GID = str(data[1][0])
                     BID = str(data[1][1])
                     status = data[1][2]
@@ -101,30 +104,30 @@ async def queueHandler():
                     serverJson[GID]['bots'][BID]['status'] = status
                     if changeTimestamp:
                         serverJson[GID]['bots'][BID]['timestamp'] = time.time()
-                    sprint("set status successful")
+                    #sprint("set status successful")
 
                 # ADD BOT - [GID, BID]
                 elif action == 'ab':
-                    nprint("ADD BOT")
+                    #nprint("ADD BOT")
                     GID = str(data[1][0])
                     BID = str(data[1][1])
                     serverJson[GID]['bots'][BID] = {'status': "unknown", 'timestamp': time.time()}
-                    sprint("add bot successful")
+                    #sprint("add bot successful")
 
                 # REMOVE BOT - [GID, BID]
                 elif action == 'rb':
-                    nprint("REMOVE BOT")
+                    #nprint("REMOVE BOT")
                     GID = str(data[1][0])
                     BID = str(data[1][1])
                     try:
                         del serverJson[GID]['bots'][BID]
-                        sprint("remove bot successful")
+                        #sprint("remove bot successful")
                     except KeyError:
                         fprint("remove bot failed | not in list")
 
                 # REMOVE GUILD - [GID]
                 elif action == 'rg':
-                    nprint("REMOVE GUILD")
+                    #nprint("REMOVE GUILD")
                     GID = str(data[1][0])
                     try:
                         del serverJson[GID]
@@ -132,6 +135,7 @@ async def queueHandler():
                     except KeyError:
                         fprint("remove guild failed | not in dict")
 
+                # POP ACTION FROM QUEUE
                 actionQueue.pop(0)
 
             # ACTIVE SERVERS JSON WRITE
@@ -156,10 +160,9 @@ async def addToQueue(action, data):
             valid = False
     if valid:
         actionQueue.append([action, data])
-        sprint(f"'{action}' added to queue")
+        #sprint(f"'{action}' added to queue")
     else:
-        fprint(f"'{action}' not valid")
-        fprint(f"{data}")
+        fprint(f"'{action}' not added to queue: invalid\n{data}")
     return valid
 
 # Checks if each server bot is offline every interval
@@ -211,15 +214,16 @@ async def checkOffline():
                         if status == "offline":
                             # BOT NOW OFFLINE
                             await addToQueue('ss', [GID, BID, status, True])
-                            # calculate delta
-                            timeStamp = data[GID]['bots'][BID]['timestamp']
-                            currentTime = time.time()
-                            diff = currentTime - timeStamp
-                            deltaTime = time.gmtime(diff)
-                            # create response
-                            response = embeds.Embed(title=f"{member} is now offline",description=f"```TOTAL UPTIME\n{(deltaTime.tm_yday - 1) * (deltaTime.tm_year - 1969)}D {deltaTime.tm_hour}H {deltaTime.tm_min}M {deltaTime.tm_sec}S```", colour=offlineColor)
-                            response.timestamp = datetime.utcnow()
-                            await sendMessage(messageChannel, response)
+                            if data[GID]['bots'][BID]['status'] != "unknown":
+                                # calculate delta
+                                timeStamp = data[GID]['bots'][BID]['timestamp']
+                                currentTime = time.time()
+                                diff = currentTime - timeStamp
+                                deltaTime = time.gmtime(diff)
+                                # create response
+                                response = embeds.Embed(title=f"{member} is now offline",description=f"```TOTAL UPTIME\n{(deltaTime.tm_yday - 1) * (deltaTime.tm_year - 1969)}D {deltaTime.tm_hour}H {deltaTime.tm_min}M {deltaTime.tm_sec}S```", colour=offlineColor)
+                                response.timestamp = datetime.utcnow()
+                                await sendMessage(messageChannel, response)
                         elif data[GID]['bots'][BID]['status'] == "offline":
                             # BOT BACK ONLINE
                             await addToQueue('ss', [GID, BID, status, True])
@@ -245,7 +249,10 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 inviteLink = os.getenv('INVITE_LINK')
 
-bot = commands.AutoShardedBot(command_prefix='$')
+# intent
+intents = Intents.all()
+
+bot = commands.AutoShardedBot(command_prefix='$', intents=intents)
 
 # ----- BOT EVENTS
 # triggered when bot is ready
@@ -303,7 +310,7 @@ async def on_command_error(ctx, error):
 @bot.command(name='assign', help='Sets the channel that OfflineNotifier will use')
 @commands.guild_only()
 async def assign(ctx):
-    nprint("user requested to assign a channel")
+    #nprint("user requested to assign a channel")
     # check if the user can manage channels
     if not ctx.author.guild_permissions.manage_channels:
         fprint("user cannot manage channels")
@@ -331,7 +338,7 @@ async def assign(ctx):
 @bot.command(name='stop', help='OfflineNotifier will stop watching bots in this server')
 @commands.guild_only()
 async def stop(ctx):
-    nprint("user requested to stop watching bots")
+    #nprint("user requested to stop watching bots")
     # check if the user can manage channels
     if not ctx.author.guild_permissions.manage_channels:
         fprint("user cannot manage channels")
@@ -354,7 +361,7 @@ async def stop(ctx):
 @bot.command(name='list', help='Lists the bots being watched in this server')
 @commands.guild_only()
 async def list(ctx):
-    nprint("user requested to display list")
+    #nprint("user requested to display list")
     GID = str(ctx.guild.id)
     listColor = embeds.Colour.from_rgb(114, 137, 218)
     serverName = bot.get_guild(int(GID))
@@ -385,7 +392,7 @@ async def list(ctx):
 # $invite - DMs the user an invite link for the bot
 @bot.command(name='invite', help='DMs the user an invite link for the bot')
 async def invite(ctx):
-    nprint("user requested invite link")
+    #nprint("user requested invite link")
     # variables
     inviteColor = embeds.Colour.from_rgb(114, 137, 218)
 
@@ -398,7 +405,7 @@ async def invite(ctx):
 # $stats - shows stats about OfflineNotifier
 @bot.command(name='stats', help='Shows stats about OfflineNotifier')
 async def stats(ctx):
-    nprint("user requested to display stats")
+    #nprint("user requested to display stats")
     statsColor = embeds.Colour.from_rgb(114, 137, 218)
 
     with open('activeServers.json') as readFile:
