@@ -364,16 +364,16 @@ async def list(ctx):
         serverJson = json.load(readFile)
     try:
         for BID in serverJson[GID]['bots']:
-            botName = bot.get_user(int(BID))
-            # calculate uptime/downtime
-            timeStamp = serverJson[GID]['bots'][BID]['timestamp']
-            currentTime = time.time()
-            diff = currentTime - timeStamp
-            deltaTime = time.gmtime(diff)
-            # get status
-            status = serverJson[GID]['bots'][BID]['status']
-            #create field
             if len(response.fields) < 25:
+                botName = bot.get_user(int(BID))
+                # calculate uptime/downtime
+                timeStamp = serverJson[GID]['bots'][BID]['timestamp']
+                currentTime = time.time()
+                diff = currentTime - timeStamp
+                deltaTime = time.gmtime(diff)
+                # get status
+                status = serverJson[GID]['bots'][BID]['status']
+                #create field
                 response.add_field(name=f"{botName}", value=f"```\nLAST STATUS\n{status}\n{'------' if status.lower() != 'offline' else '--------'}\n{'UPTIME' if status.lower() != 'offline' else 'DOWNTIME'}\n{(deltaTime.tm_yday - 1) * (deltaTime.tm_year - 1969)}D {deltaTime.tm_hour}H {deltaTime.tm_min}M {deltaTime.tm_sec}S```")
         if len(response.fields) == 25:
             response.remove_field(24)
