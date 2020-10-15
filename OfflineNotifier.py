@@ -72,7 +72,7 @@ async def queueHandler():
     while True:
         if actionQueue:
             # ACTIVE SERVERS JSON READ
-            with open('activeServers.json') as readFile:
+            with open('activeServersPY.json') as readFile:
                 serverJson = json.load(readFile)
             while actionQueue:
                 data = actionQueue[0]
@@ -135,7 +135,7 @@ async def queueHandler():
                 actionQueue.pop(0)
 
             # ACTIVE SERVERS JSON WRITE
-            with open('activeServers.json', 'w') as writeFile:
+            with open('activeServersPY.json', 'w') as writeFile:
                 json.dump(serverJson, writeFile)
 
         await asyncio.sleep(0.1)
@@ -163,7 +163,7 @@ async def addToQueue(action, data):
 # Checks if each server bot is offline every interval
 async def checkOffline():
     while True:
-        with open('activeServers.json') as readFile:
+        with open('activeServersPY.json') as readFile:
             data = json.load(readFile)
 
         # CHANGE PRESENCE
@@ -350,7 +350,7 @@ async def list(ctx):
     serverName = bot.get_guild(int(GID))
     response = embeds.Embed(title=f"Bots being watched in {serverName}", colour=listColor)
     response.timestamp = datetime.utcnow()
-    with open('activeServers.json') as readFile:
+    with open('activeServersPY.json') as readFile:
         serverJson = json.load(readFile)
     try:
         for BID in serverJson[GID]['bots']:
@@ -383,7 +383,7 @@ async def invite(ctx):
 async def stats(ctx):
     statsColor = embeds.Colour.from_rgb(114, 137, 218)
 
-    with open('activeServers.json') as readFile:
+    with open('activeServersPY.json') as readFile:
         serverJson = json.load(readFile)
 
     # CALCULATE TOTALS
