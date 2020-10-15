@@ -17,6 +17,7 @@ import (
 )
 
 var (
+	botVersion = "GOLANG 1.1"
 	actionQueue []Request
 	startTime = time.Now().Unix()
 	startedFunctions = false
@@ -248,6 +249,7 @@ func stats(s *discordgo.Session, message *discordgo.MessageCreate) {
 		&discordgo.MessageEmbedField{Name:   "Total servers", Value:  "```"+strconv.FormatInt(totalServers, 10)+"```", Inline: true},
 		&discordgo.MessageEmbedField{Name:   "Active servers", Value:  "```"+strconv.FormatInt(totalActive, 10)+"```", Inline: true},
 		&discordgo.MessageEmbedField{Name:   "Bots watching", Value:  "```"+strconv.FormatInt(totalBots, 10)+"```", Inline: true},
+		&discordgo.MessageEmbedField{Name:   "Bot version", Value:  "```"+botVersion+"```", Inline: true},
 		&discordgo.MessageEmbedField{Name:   "Uptime", Value:  "```"+uptime+"```", Inline: true},
 	}
 	go sendEmbed(s, message.ChannelID, embed)
