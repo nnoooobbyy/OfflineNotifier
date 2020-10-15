@@ -27,6 +27,7 @@ onlineColor = embeds.Colour.from_rgb(67,181,129)
 offlineColor = embeds.Colour.from_rgb(114,124,138)
 
 # variables
+botVersion = "PYTHON 3.1"
 actionQueue = []
 connected = False
 waitTime = 5 # second(s)
@@ -402,6 +403,7 @@ async def stats(ctx):
     statsEmbed.add_field(name="Total servers", value=f"```{totalServers}```")
     statsEmbed.add_field(name="Active servers", value=f"```{totalActive}```")
     statsEmbed.add_field(name="Bots watching", value=f"```{totalBots}```")
+    statsEmbed.add_field(name="Bot version", value=f"```{botVersion}```")
     statsEmbed.add_field(name="Uptime", value=f"```{(uptime.tm_yday - 1) * (uptime.tm_year - 1969)}D {uptime.tm_hour}H {uptime.tm_min}M {uptime.tm_sec}S```")
     await sendMessage(ctx, statsEmbed)
  
