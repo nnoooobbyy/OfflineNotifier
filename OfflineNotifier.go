@@ -47,34 +47,7 @@ type Guild struct {
 	CID string
 }
 
-// ----- INIT AND MAIN
-func init(){
-
-}
-
-func readJSONToken(fileName string, filter func(map[string]interface{}) bool) []map[string]interface{} {
-	file, _ := os.Open(fileName)
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-
-	filteredData := []map[string]interface{}{}
-
-	// Read the array open bracket
-	decoder.Token()
-
-	data := map[string]interface{}{}
-	for decoder.More() {
-		decoder.Decode(&data)
-
-		if filter(data) {
-			filteredData = append(filteredData, data)
-		}
-	}
-
-	return filteredData
-}
-
+// -----  MAIN
 func main() {
 	// LOADING ENV
 	err := godotenv.Load()
@@ -190,7 +163,7 @@ func assign(s *discordgo.Session, message *discordgo.MessageCreate) {
 	embed := &discordgo.MessageEmbed{}
 	embed.Title = "Assign channel request successful"
 	embed.Color = successColor
-	sendEmbed(s, message.ChannelID, embed)
+	go sendEmbed(s, message.ChannelID, embed)
 
 }
 
@@ -200,7 +173,7 @@ func stop(s *discordgo.Session, message *discordgo.MessageCreate) {
 	embed := &discordgo.MessageEmbed{}
 	embed.Title = "Stop request successful"
 	embed.Color = successColor
-	sendEmbed(s, message.ChannelID, embed)
+	go sendEmbed(s, message.ChannelID, embed)
 }
 
 // $list - Lists the bots being watched in this server
@@ -213,7 +186,7 @@ func list(s *discordgo.Session, message *discordgo.MessageCreate) {
 		embed := &discordgo.MessageEmbed{}
 		embed.Title = "Bots aren't being watched in " + guild.Name
 		embed.Color = failColor
-		sendEmbed(s, message.ChannelID, embed)
+		go sendEmbed(s, message.ChannelID, embed)
 		return
 	}
 
@@ -238,7 +211,7 @@ func list(s *discordgo.Session, message *discordgo.MessageCreate) {
 		field := &discordgo.MessageEmbedField{Name: "CAN ONLY LIST FIRST 24 BOTS", Value: "```Sorry for the inconvenience```"}
 		embed.Fields = append(embed.Fields, field)
 	}
-	sendEmbed(s, message.ChannelID, embed)
+	go sendEmbed(s, message.ChannelID, embed)
 }
 
 // $invite - DMs the user an invite link for the bot
@@ -248,7 +221,7 @@ func invite(s *discordgo.Session, message *discordgo.MessageCreate) {
 	embed.URL = inviteLink
 	embed.Color = defaultColor
 	authorDM, _ := s.UserChannelCreate(message.Author.ID)
-	sendEmbed(s, authorDM.ID, embed)
+	go sendEmbed(s, authorDM.ID, embed)
 }
 
 // $stats - shows stats about OfflineNotifier
@@ -277,7 +250,7 @@ func stats(s *discordgo.Session, message *discordgo.MessageCreate) {
 		&discordgo.MessageEmbedField{Name:   "Bots watching", Value:  "```"+strconv.FormatInt(totalBots, 10)+"```", Inline: true},
 		&discordgo.MessageEmbedField{Name:   "Uptime", Value:  "```"+uptime+"```", Inline: true},
 	}
-	sendEmbed(s, message.ChannelID, embed)
+	go sendEmbed(s, message.ChannelID, embed)
 }
 
 // $help - lists commands
@@ -293,7 +266,7 @@ func help(s *discordgo.Session, message *discordgo.MessageCreate) {
 		&discordgo.MessageEmbedField{Name:   "$help", Value:  "```Lists commands```", Inline: true},
 	}
 	embed.Color = defaultColor
-	sendEmbed(s, message.ChannelID, embed)
+	go sendEmbed(s, message.ChannelID, embed)
 }
 
 // ----- LIST FUNCTIONS
@@ -321,6 +294,15 @@ func removeBot (list []Bot, index int) []Bot {
 
 func removeGuild (list []Guild, index int) []Guild {
 	return append(list[:index], list[index + 1:]...)
+}
+
+func findStatus (presenceList []*discordgo.Presence, userID string) string {
+	for _, p := range presenceList {
+		if p.User.ID == userID {
+			return string(p.Status)
+		}
+	}
+	return "offline"
 }
 
 // ----- CALCULATION FUNCTIONS
@@ -383,9 +365,9 @@ func addToQueue(action string, data [4]string){
 }
 
 func getGuilds() (guildList []Guild){
-	content, err := ioutil.ReadFile("activeServers.json")
+	content, err := ioutil.ReadFile("activeServersGO.json")
 	if err != nil {
-		fmt.Println("[GET GUILDS] error reading activeServers.json |", err)
+		fmt.Println("[GET GUILDS] error reading activeServersGO.json |", err)
 	}
 
 	var guildMap map[string]interface{}
@@ -452,6 +434,7 @@ func queueHandler(){
 				case "ac":
 					GID := request.data[0]
 					CID := request.data[1]
+
 					index, err := indexGID(guildList, GID)
 					if err != nil {
 						fmt.Println("[ASSIGN CHANNEL] error indexing ID |", err)
@@ -466,25 +449,27 @@ func queueHandler(){
 					GID := request.data[0]
 					BID := request.data[1]
 					status := request.data[2]
+
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						fmt.Println("[SET STATUS] error indexing ID |", err)
-					} else {
-						indexB, err := indexBID(guildList[indexG].bots, BID)
-						if err != nil {
-							fmt.Println("[SET STATUS] error indexing ID |", err)
-						} else {
-							guildList[indexG].bots[indexB].status = status
-							if strings.ToLower(request.data[3]) == "true" {
-								guildList[indexG].bots[indexB].timestamp = time.Now().Unix()
-							}
-						}
+						continue
+					}
+					indexB, err := indexBID(guildList[indexG].bots, BID)
+					if err != nil {
+						fmt.Println("[SET STATUS] error indexing ID |", err)
+						continue
+					}
+					guildList[indexG].bots[indexB].status = status
+					if strings.ToLower(request.data[3]) == "true" {
+						guildList[indexG].bots[indexB].timestamp = time.Now().Unix()
 					}
 
 				// ADD BOT - [GID, BID]
 				case "ab":
 					GID := request.data[0]
 					BID := request.data[1]
+
 					index, err := indexGID(guildList, GID)
 					if err != nil {
 						fmt.Println("[ADD BOT] error indexing ID |", err)
@@ -497,6 +482,7 @@ func queueHandler(){
 				case "rb":
 					GID := request.data[0]
 					BID := request.data[1]
+
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						fmt.Println("[REMOVE BOT] error indexing ID |", err)
@@ -512,6 +498,7 @@ func queueHandler(){
 				// REMOVE GUILD - [GID]
 				case "rg":
 					GID := request.data[0]
+
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						fmt.Println("[REMOVE GUILD] error indexing ID |", err)
@@ -524,13 +511,13 @@ func queueHandler(){
 				actionQueue = actionQueue[1:len(actionQueue)]
 			}
 			guildJson := []byte(packGuilds(guildList))
-			ioutil.WriteFile("activeServers.json", guildJson, os.ModePerm)
+			ioutil.WriteFile("activeServersGO.json", guildJson, 0755)
 		}
 	}
 }
 
 func checkOffline(s *discordgo.Session){
-	for {
+	for true {
 		time.Sleep(1 * time.Second)
 		guildData := getGuilds()
 
@@ -541,43 +528,44 @@ func checkOffline(s *discordgo.Session){
 				totalBots += 1
 			}
 		}
+
 		statusText := "with "+strconv.FormatInt(totalBots, 10)+" bots"
 		s.UpdateStatus(0,statusText)
 
 		for _, guild := range guildData{
-			// check if offline notifier is still in guild
-			_, err := s.Guild(guild.ID)
+
+			discGuild, err := s.State.Guild(guild.ID)
 			if err != nil{
+				fmt.Println("[CHECK OFFLINE] error setting currentGuild |", err)
 				if !connected {
 					continue
 				}
 				addToQueue("rg", [4]string{guild.ID})
-				fmt.Println("[CHECK OFFLINE] error setting currentGuild |", err)
 				continue
 			}
 
 			// check if offline notifier is still in channel
 			_, err = s.Channel(guild.CID)
 			if err != nil{
+				fmt.Println("[CHECK OFFLINE] error setting messageChannel |", err)
 				if !connected {
 					continue
 				}
 				addToQueue("rg", [4]string{guild.ID})
-				fmt.Println("[CHECK OFFLINE] error setting messageChannel |", err)
 				continue
 			}
 
-			// cull bots that are no longer in the server
-			for _, bot := range guild.bots{
-				_, err := s.GuildMember(guild.ID, bot.ID)
-				if err != nil && connected{
-					addToQueue("rb", [4]string{guild.ID, bot.ID})
-					fmt.Println("[CHECK OFFLINE] error finding bot |", err)
-					continue
-				}
+			// get member list
+			memberList, err := s.GuildMembers(guild.ID, "", 1000)
+			if err != nil{
+				fmt.Println("[CHECK OFFLINE] error getting guild members |", err)
+				continue
 			}
 
-			memberList, _ := s.GuildMembers(guild.ID, "", 1000)
+			var botsRemaining []Bot
+			copy(botsRemaining, guild.bots)
+			presenceList := discGuild.Presences
+
 			for _, member := range memberList {
 				if member.User.Bot && member.User.ID != s.State.User.ID {
 					index, err := indexBID(guild.bots, member.User.ID)
@@ -586,16 +574,21 @@ func checkOffline(s *discordgo.Session){
 						addToQueue("ab", [4]string{guild.ID, member.User.ID})
 						continue
 					}
-					currentStatus, err := s.State.Presence(guild.ID, member.User.ID)
-					if err != nil{
-						continue
+
+					// pop element from list
+					if len(botsRemaining) != 0{
+						remainIndex, _ := indexBID(botsRemaining, member.User.ID)
+						botsRemaining[len(botsRemaining)-1], botsRemaining[remainIndex] = botsRemaining[remainIndex], botsRemaining[len(botsRemaining)-1]
+						botsRemaining = botsRemaining[:len(botsRemaining)-1]
 					}
-					if string(currentStatus.Status) == guild.bots[index].status {
+
+					currentStatus := findStatus(presenceList, member.User.ID)
+					if currentStatus == guild.bots[index].status {
 						// if nothing changed, move on
 						continue
 					}
-					if guild.bots[index].status == "offline" || string(currentStatus.Status) == "offline" {
-						addToQueue("ss", [4]string{guild.ID, guild.bots[index].ID, string(currentStatus.Status), "true"})
+					if guild.bots[index].status == "offline" || currentStatus == "offline" {
+						addToQueue("ss", [4]string{guild.ID, guild.bots[index].ID, currentStatus, "true"})
 						if guild.bots[index].status != "unknown"{
 							deltaTime := calculateDeltaTime(guild.bots[index].timestamp)
 							embed := &discordgo.MessageEmbed{Timestamp: time.Now().UTC().Format(time.RFC3339)}
@@ -610,12 +603,16 @@ func checkOffline(s *discordgo.Session){
 								embed.Description = "```TOTAL UPTIME\n"+deltaTime+"```"
 								embed.Color = offlineColor
 							}
-							sendEmbed(s, guild.CID, embed)
+							go sendEmbed(s, guild.CID, embed)
 						}
 					} else {
-						addToQueue("ss", [4]string{guild.ID, guild.bots[index].ID, string(currentStatus.Status), "false"})
+						addToQueue("ss", [4]string{guild.ID, guild.bots[index].ID, currentStatus, "false"})
 					}
 				}
+			}
+			// cull remaining bots
+			for _, cullBot := range botsRemaining {
+				addToQueue("rb", [4]string{guild.ID, cullBot.ID})
 			}
 		}
 	}
