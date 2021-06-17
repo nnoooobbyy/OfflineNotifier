@@ -1,24 +1,11 @@
-import os
-import sys
-import json
-import asyncio
-import regex as re
-import inspect
-import time
-
+import os, sys, json, asyncio, regex, inspect, time
 from colorama import init, Fore
 from datetime import datetime
-from dotenv import load_dotenv
-from discord import Activity
-from discord import ActivityType
-from discord import embeds
-from discord import Intents
-from discord import Status
-from discord import errors
+from discord import Activity, ActivityType, embeds, Intents, Status, errors
 from discord.ext import commands
+from dotenv import load_dotenv
 
 init()
-
 # offlinebot :D
 colors = {'n': Fore.LIGHTWHITE_EX, 's': Fore.LIGHTGREEN_EX, 'f': Fore.LIGHTRED_EX}
 successColor = embeds.Colour.from_rgb(118,224,110)
@@ -27,11 +14,12 @@ onlineColor = embeds.Colour.from_rgb(67,181,129)
 offlineColor = embeds.Colour.from_rgb(114,124,138)
 
 # variables
-botVersion = "PYTHON 3.1"
+botVersion = "V5 | PYTHON"
 actionQueue = []
 connected = False
 waitTime = 5 # second(s)
 startTime = time.time()
+lastBeat = datetime.utcnow()
 
 # ----- DEFINITIONS
 # PRINT DEFS
@@ -69,6 +57,7 @@ async def sendMessage(location, message):
 
 # handles all requests in queue every interval
 async def queueHandler():
+    sprint("queueHandler started")
     while True:
         if actionQueue:
             # ACTIVE SERVERS JSON READ
@@ -150,7 +139,7 @@ async def addToQueue(action, data):
     # checks to make sure the data is valid
     for ID in checkData:
         ID = str(ID)
-        if re.match('^[0-9]+$', ID):
+        if regex.match('^[0-9]+$', ID):
             pass
         else:
             valid = False
@@ -162,20 +151,35 @@ async def addToQueue(action, data):
 
 # Checks if each server bot is offline every interval
 async def checkOffline():
+    global lastBeat
+    sprint("checkOffline started")
+    
+    successCount = 0
+    successThreshold = 720 # threshold * waitTime (5) = messageIntervals
+    botWorking = True
+
     while True:
         with open('activeServersPY.json') as readFile:
             data = json.load(readFile)
 
         # CHANGE PRESENCE
-        totalBots = 0
-        for GID in data:
-            for BID in data[GID]['bots']:
-                totalBots += 1
-        activity = Activity(type=ActivityType.watching, name=f"{totalBots} bots")
-        await bot.change_presence(activity=activity)
+        if botWorking:
+            totalBots = 0
+            for GID in data:
+                for BID in data[GID]['bots']:
+                    totalBots += 1
+            activity = Activity(type=ActivityType.watching, name=f"{totalBots} bots")
+            await bot.change_presence(status=Status.online, activity=activity)
+        else:
+            activity = Activity(type=ActivityType.watching, name=f"nothing, bot broke :<", )
+            ownerDM = await bot.create_dm(bot.owner_id)
+            await sendMessage(ownerDM, "```IM OFFLINE HELPPPPPP AAAAAAAAAAAAAAGH IT BURNS OMFG```")
+            await bot.change_presence(status=Status.dnd, activity=activity)
 
         # loops through each active server
+        GIDCount = 0
         for GID in data:
+            GIDCount += 1
 
             # checks to see if offlinenotifier is still in guild
             currentGuild = bot.get_guild(int(GID))
@@ -195,13 +199,16 @@ async def checkOffline():
             
             # culling bots that aren't in the server anymore
             for BID in data[GID]['bots']:
-                if not currentGuild.get_member(int(BID)) and connected:
+                member = currentGuild.get_member(int(BID))
+                if not member:
+                    if not connected: continue
                     fprint("bot no longer in guild, removing from list")
                     await addToQueue('rb', [GID, BID])
 
             # loop through each user for bots
             for member in currentGuild.members:
                 if member.bot and member.id != bot.user.id:
+                    nprint("bot detected B)")
                     BID = str(member.id)
                     try:
                         status = str(member.status)
@@ -226,6 +233,17 @@ async def checkOffline():
                     except KeyError:
                         # ADD NEW BOT TO LIST
                         await addToQueue('ab', [GID, BID])
+        if GIDCount == len(data):
+            if successCount < successThreshold:
+                successCount += 1
+            else:
+                sprint(f"HEARTBEAT | {GIDCount}/{len(data)}")
+                successCount = 0
+            lastBeat = datetime.utcnow()
+            botWorking = True
+        else:
+            fprint(f"!!! | {GIDCount}/{len(data)}")
+            botWorking = False
             
         await asyncio.sleep(waitTime)
 
@@ -235,7 +253,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 inviteLink = os.getenv('INVITE_LINK')
 
 # intent
-intents = Intents.all()
+intents = Intents.default()
 
 bot = commands.AutoShardedBot(command_prefix='$', intents=intents)
 
@@ -253,6 +271,7 @@ async def on_ready():
 # triggered when bot connects
 @bot.event
 async def on_connect():
+    global connected
     sprint(f'{bot.user.name} connected at {time.strftime("%m/%d/%Y %H:%M:%S")}')
     connected = True
     activity = Activity(type=ActivityType.watching, name="soon, please wait")
@@ -261,6 +280,7 @@ async def on_connect():
 # triggered when bot resumes
 @bot.event
 async def on_resumed():
+    global connected
     sprint(f'{bot.user.name} resumed at {time.strftime("%m/%d/%Y %H:%M:%S")}')
     connected = True
 
@@ -272,6 +292,7 @@ async def on_shard_ready(shard):
 # triggered when bot is disconnected
 @bot.event
 async def on_disconnect():
+    global connected
     fprint(f'{bot.user.name} disconnected at {time.strftime("%m/%d/%Y %H:%M:%S")}')
     connected = False
 
@@ -399,7 +420,8 @@ async def stats(ctx):
 
     # MAKE EMBED
     statsEmbed = embeds.Embed(title="OfflineNotifier stats", colour=statsColor)
-    statsEmbed.timestamp = datetime.utcnow()
+    statsEmbed.set_footer(text="Last heartbeat")
+    statsEmbed.timestamp = lastBeat
     statsEmbed.add_field(name="Total servers", value=f"```{totalServers}```")
     statsEmbed.add_field(name="Active servers", value=f"```{totalActive}```")
     statsEmbed.add_field(name="Bots watching", value=f"```{totalBots}```")
