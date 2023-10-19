@@ -19,7 +19,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion       = "V6.4 | GOLANG"
+	botVersion       = "V6.5 | GOLANG"
 	actionQueue      []Request
 	startTime        = time.Now().Unix()
 	startedFunctions = false
@@ -118,6 +118,11 @@ func main() {
 			Type:        discordgo.ChatApplicationCommand,
 			Description: "Need help with OfflineNotifier? Join this server!",
 		},
+		{
+			Name:        "privacy",
+			Type:        discordgo.ChatApplicationCommand,
+			Description: "Sends OfflineNotifier's privacy policy",
+		},
 	}
 
 	// INTENTS
@@ -196,7 +201,6 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 // called when OfflineNotifier connects to discord
 func connect(s *discordgo.Session, event *discordgo.Connect) {
 	connected = true
-	s.UpdateWatchStatus(1, "soon, please wait")
 	log.Println("[CONNECTED]")
 }
 
@@ -238,6 +242,8 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			invite(s, i)
 		case "list":
 			list(s, i)
+		case "privacy":
+			privacy(s, i)
 		case "stats":
 			stats(s, i)
 		case "stop":
@@ -249,6 +255,8 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		switch i.ApplicationCommandData().Name {
 		case "invite":
 			invite(s, i)
+		case "privacy":
+			privacy(s, i)
 		case "stats":
 			stats(s, i)
 		case "support":
@@ -354,6 +362,20 @@ func list(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		embed[0].Fields = embed[0].Fields[:24]
 		field := &discordgo.MessageEmbedField{Name: "CAN ONLY LIST FIRST 24 BOTS", Value: "```Sorry for the inconvenience```"}
 		embed[0].Fields = append(embed[0].Fields, field)
+	}
+	data := &discordgo.InteractionResponseData{Embeds: embed}
+	response := &discordgo.InteractionResponse{Type: 4, Data: data}
+	go s.InteractionRespond(i.Interaction, response)
+}
+
+// privacy - sends OfflineNotifier's privacy policy
+func privacy(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	embed := []*discordgo.MessageEmbed{
+		{
+			Title:       "Privacy policy",
+			Description: "```OfflineNotifier NEVER stores user data. It only ever stores bot, server, and channel IDs along with a bot's current online/offline status. It uses this data to track a bot's status and to send a notification in the right server and channel. This data is never shared with anyone and is only ever used within the bot. To remove your data from the bot, use /stop. Questions? Join the server at /support.```",
+			Color:       defaultColor,
+		},
 	}
 	data := &discordgo.InteractionResponseData{Embeds: embed}
 	response := &discordgo.InteractionResponse{Type: 4, Data: data}
