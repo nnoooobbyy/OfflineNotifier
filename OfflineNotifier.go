@@ -17,8 +17,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ----- VARS
 var (
-	botVersion       = "V6.2 | GOLANG"
+	botVersion       = "V6.4 | GOLANG"
 	actionQueue      []Request
 	startTime        = time.Now().Unix()
 	startedFunctions = false
@@ -61,7 +62,7 @@ func main() {
 	log.SetOutput(f)
 
 	// LOADING ENV
-	err = godotenv.Load("./OfflineNotifier.env")
+	err = godotenv.Load("./Carbon.env")
 	if err != nil {
 		log.Fatal("[GODOTENV] error loading .env file |", err)
 		os.Exit(1)
@@ -129,9 +130,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// write commands
 	_, err = discord.ApplicationCommandBulkOverwrite(discord.State.User.ID, "", commands)
 	if err != nil {
-		log.Println("[COMMAND] error creating command |", err)
+		log.Println("[COMMAND] error writing commands |", err)
 		os.Exit(1)
 	}
 
@@ -147,35 +149,6 @@ func main() {
 }
 
 // ----- BOT EVENTS
-// called when discord responds with the ready event
-func ready(s *discordgo.Session, event *discordgo.Ready) {
-	log.Println("[READY]")
-	if !startedFunctions {
-		log.Println("[GOLANG] starting coroutines...")
-		go requestBots(s)
-		go queueHandler(s)
-		startedFunctions = true
-	}
-}
-
-// called when OfflineNotifier gets disconnected from discord
-func disconnect(s *discordgo.Session, event *discordgo.Disconnect) {
-	connected = false
-	log.Println("[DISCONNECTED]")
-}
-
-// called when OfflineNotifier connects to discord
-func connect(s *discordgo.Session, event *discordgo.Connect) {
-	connected = true
-	s.UpdateWatchStatus(1, "soon, please wait")
-	log.Println("[CONNECTED]")
-}
-
-// called when connection resumes
-func resumed(s *discordgo.Session, event *discordgo.Resumed) {
-	connected = true
-	log.Println("[RESUMED]")
-}
 
 // called when OfflineNotifier receives GuildMembersChunk
 func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
@@ -189,7 +162,7 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 	for _, bot := range guild.bots {
 		botMember, err := s.GuildMember(guild.ID, bot.ID)
 		if err != nil {
-			logMessage(s, "[CHECK OFFLINE] error getting member |", err)
+			logMessage(s, "[CHECK OFFLINE] error getting bot |", err)
 		}
 		currentStatus := findStatus(event.Presences, bot.ID)
 		if currentStatus == bot.status {
@@ -220,8 +193,39 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 	}
 }
 
+// called when OfflineNotifier connects to discord
+func connect(s *discordgo.Session, event *discordgo.Connect) {
+	connected = true
+	s.UpdateWatchStatus(1, "soon, please wait")
+	log.Println("[CONNECTED]")
+}
+
+// called when OfflineNotifier gets disconnected from discord
+func disconnect(s *discordgo.Session, event *discordgo.Disconnect) {
+	connected = false
+	log.Println("[DISCONNECTED]")
+}
+
+// called when discord responds with the ready event
+func ready(s *discordgo.Session, event *discordgo.Ready) {
+	log.Println("[READY]")
+	if !startedFunctions {
+		log.Println("[GOLANG] starting coroutines...")
+		go requestBots(s)
+		go queueHandler(s)
+		startedFunctions = true
+	}
+}
+
+// called when connection resumes
+func resumed(s *discordgo.Session, event *discordgo.Resumed) {
+	connected = true
+	log.Println("[RESUMED]")
+}
+
 // ----- BOT COMMANDS
-// command handler
+
+// receives slash command interactions and runs the respective command
 func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if i.Type != discordgo.InteractionApplicationCommand {
 		return
@@ -230,14 +234,14 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		switch i.ApplicationCommandData().Name {
 		case "assign":
 			assign(s, i)
-		case "stop":
-			stop(s, i)
-		case "list":
-			list(s, i)
 		case "invite":
 			invite(s, i)
+		case "list":
+			list(s, i)
 		case "stats":
 			stats(s, i)
+		case "stop":
+			stop(s, i)
 		case "support":
 			support(s, i)
 		}
@@ -245,10 +249,10 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		switch i.ApplicationCommandData().Name {
 		case "invite":
 			invite(s, i)
-		case "support":
-			support(s, i)
 		case "stats":
 			stats(s, i)
+		case "support":
+			support(s, i)
 		default:
 			embed := []*discordgo.MessageEmbed{
 				{
@@ -265,7 +269,7 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 }
 
-// assign - Sets the channel that OfflineNotifier will use
+// assign - sets the channel that OfflineNotifier will use
 func assign(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	var embed []*discordgo.MessageEmbed
 	hasPermission, _ := memberHasPermission(s, i.GuildID, i.Member.User.ID, discordgo.PermissionManageChannels)
@@ -291,33 +295,21 @@ func assign(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	go s.InteractionRespond(i.Interaction, response)
 }
 
-// stop - OfflineNotifier will stop watching bots in this server
-func stop(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	var embed []*discordgo.MessageEmbed
-	hasPermission, _ := memberHasPermission(s, i.GuildID, i.Member.User.ID, discordgo.PermissionManageChannels)
-	if hasPermission {
-		addToQueue("rg", [4]string{i.GuildID})
-		embed = []*discordgo.MessageEmbed{
-			{
-				Title: "Stop request successful",
-				Color: successColor,
-			},
-		}
-	} else {
-		embed = []*discordgo.MessageEmbed{
-			{
-				Title:       "Stop request failed",
-				Description: "User does not have manage channel permission",
-				Color:       failColor,
-			},
-		}
+// invite - sends an invite link for the bot
+func invite(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	embed := []*discordgo.MessageEmbed{
+		{
+			Title: "Want OfflineNotifier in your server? Use this link!",
+			URL:   inviteLink,
+			Color: defaultColor,
+		},
 	}
 	data := &discordgo.InteractionResponseData{Embeds: embed}
 	response := &discordgo.InteractionResponse{Type: 4, Data: data}
 	go s.InteractionRespond(i.Interaction, response)
 }
 
-// list - Lists the bots being watched in this server
+// list - lists the bots being watched in this server
 func list(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	discordGuild, _ := s.Guild(i.GuildID)
 	guild, err := getGuild(s, discordGuild.ID)
@@ -368,34 +360,6 @@ func list(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	go s.InteractionRespond(i.Interaction, response)
 }
 
-// invite - sends an invite link for the bot
-func invite(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	embed := []*discordgo.MessageEmbed{
-		{
-			Title: "Want OfflineNotifier in your server? Use this link!",
-			URL:   inviteLink,
-			Color: defaultColor,
-		},
-	}
-	data := &discordgo.InteractionResponseData{Embeds: embed}
-	response := &discordgo.InteractionResponse{Type: 4, Data: data}
-	go s.InteractionRespond(i.Interaction, response)
-}
-
-// support - sends a server invite for nooby's bot sanctuary
-func support(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	embed := []*discordgo.MessageEmbed{
-		{
-			Title: "Need help with OfflineNotifier? Join this server!",
-			URL:   "https://discord.gg/YDRKdkh",
-			Color: defaultColor,
-		},
-	}
-	data := &discordgo.InteractionResponseData{Embeds: embed}
-	response := &discordgo.InteractionResponse{Type: 4, Data: data}
-	go s.InteractionRespond(i.Interaction, response)
-}
-
 // stats - shows stats about OfflineNotifier
 func stats(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	// calculate totals
@@ -432,33 +396,49 @@ func stats(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	go s.InteractionRespond(i.Interaction, response)
 }
 
+// stop - stops watching a server
+func stop(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	var embed []*discordgo.MessageEmbed
+	hasPermission, _ := memberHasPermission(s, i.GuildID, i.Member.User.ID, discordgo.PermissionManageChannels)
+	if hasPermission {
+		addToQueue("rg", [4]string{i.GuildID})
+		embed = []*discordgo.MessageEmbed{
+			{
+				Title: "Stop request successful",
+				Color: successColor,
+			},
+		}
+	} else {
+		embed = []*discordgo.MessageEmbed{
+			{
+				Title:       "Stop request failed",
+				Description: "User does not have manage channel permission",
+				Color:       failColor,
+			},
+		}
+	}
+	data := &discordgo.InteractionResponseData{Embeds: embed}
+	response := &discordgo.InteractionResponse{Type: 4, Data: data}
+	go s.InteractionRespond(i.Interaction, response)
+}
+
+// support - sends a server invite for nooby's bot sanctuary
+func support(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	embed := []*discordgo.MessageEmbed{
+		{
+			Title: "Need help with OfflineNotifier? Join this server!",
+			URL:   "https://discord.gg/YDRKdkh",
+			Color: defaultColor,
+		},
+	}
+	data := &discordgo.InteractionResponseData{Embeds: embed}
+	response := &discordgo.InteractionResponse{Type: 4, Data: data}
+	go s.InteractionRespond(i.Interaction, response)
+}
+
 // ----- LIST FUNCTIONS
-func indexGID(list []Guild, ID string) (i int, err error) {
-	for i = range list {
-		if list[i].ID == ID {
-			return i, nil
-		}
-	}
-	return 0, errors.New("not in list")
-}
 
-func indexBID(list []Bot, ID string) (i int, err error) {
-	for i = range list {
-		if list[i].ID == ID {
-			return i, nil
-		}
-	}
-	return 0, errors.New("not in list")
-}
-
-func removeBot(list []Bot, index int) []Bot {
-	return append(list[:index], list[index+1:]...)
-}
-
-func removeGuild(list []Guild, index int) []Guild {
-	return append(list[:index], list[index+1:]...)
-}
-
+// looks through a discord presence list for a matching ID, returns the status
 func findStatus(presenceList []*discordgo.Presence, userID string) string {
 	for _, p := range presenceList {
 		if p.User.ID == userID {
@@ -468,6 +448,7 @@ func findStatus(presenceList []*discordgo.Presence, userID string) string {
 	return "offline"
 }
 
+// looks through all guilds to find a matching guild ID, returns that guild object
 func getGuild(s *discordgo.Session, GID string) (guild Guild, err error) {
 	content, err := ioutil.ReadFile("activeServersGO.json")
 	if err != nil {
@@ -512,7 +493,34 @@ func getGuild(s *discordgo.Session, GID string) (guild Guild, err error) {
 	return emptyGuild, errors.New("guild not found")
 }
 
-// ----- CALCULATION FUNCTIONS
+// looks through a bot ID list to find the matching ID, returns the index
+func indexBID(list []Bot, ID string) (i int, err error) {
+	for i = range list {
+		if list[i].ID == ID {
+			return i, nil
+		}
+	}
+	return 0, errors.New("not in list")
+}
+
+// looks through a guild ID list to find the matching ID, returns the index
+func indexGID(list []Guild, ID string) (i int, err error) {
+	for i = range list {
+		if list[i].ID == ID {
+			return i, nil
+		}
+	}
+	return 0, errors.New("not in list")
+}
+
+// ----- FRAMEWORK FUNCTIONS
+
+// adds actions into the action queue
+func addToQueue(action string, data [4]string) {
+	request := Request{action, data}
+	actionQueue = append(actionQueue, request)
+}
+
 // calculate time delta
 func calculateDeltaTime(unixTime int64) string {
 	// calculate
@@ -528,42 +536,7 @@ func calculateDeltaTime(unixTime int64) string {
 	return day + "D " + hour + "H " + minute + "M " + second + "S"
 }
 
-// ----- FRAMEWORK FUNCTIONS
-func sendEmbed(s *discordgo.Session, CID string, embed *discordgo.MessageEmbed) {
-	_, err := s.ChannelMessageSendEmbed(CID, embed)
-	if err != nil {
-		logMessage(s, "[SEND EMBED] embed failed to send |", err)
-	}
-}
-
-func memberHasPermission(s *discordgo.Session, guildID string, userID string, permission int) (bool, error) {
-	member, err := s.State.Member(guildID, userID)
-	if err != nil {
-		if member, err = s.GuildMember(guildID, userID); err != nil {
-			return false, err
-		}
-	}
-
-	// Iterate through the role IDs stored in member.Roles
-	// to check permissions
-	for _, roleID := range member.Roles {
-		role, err := s.State.Role(guildID, roleID)
-		if err != nil {
-			return false, err
-		}
-		if role.Permissions&int64(permission) != 0 {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-func addToQueue(action string, data [4]string) {
-	request := Request{action, data}
-	actionQueue = append(actionQueue, request)
-}
-
+// reads from a json file and turns data into a guild list
 func getGuilds(s *discordgo.Session) (guildList []Guild) {
 	content, err := ioutil.ReadFile("activeServersGO.json")
 	if err != nil {
@@ -601,6 +574,46 @@ func getGuilds(s *discordgo.Session) (guildList []Guild) {
 	return
 }
 
+// sends strings to the log and then DMs the bot owner
+func logMessage(s *discordgo.Session, v ...interface{}) {
+	log.Println(v...)
+	dmChannel, err := s.UserChannelCreate(ownerID)
+	if err != nil {
+		log.Println("[LOG MESSAGE] error creating DM channel |", err)
+		return
+	}
+	embed := discordgo.MessageEmbed{
+		Title: fmt.Sprintln(v...),
+		Color: failColor,
+	}
+	sendEmbed(s, dmChannel.ID, &embed)
+}
+
+// checks if a member has a certain permission in a guild, returns a bool
+func memberHasPermission(s *discordgo.Session, guildID string, userID string, permission int) (bool, error) {
+	member, err := s.State.Member(guildID, userID)
+	if err != nil {
+		if member, err = s.GuildMember(guildID, userID); err != nil {
+			return false, err
+		}
+	}
+
+	// Iterate through the role IDs stored in member.Roles
+	// to check permissions
+	for _, roleID := range member.Roles {
+		role, err := s.State.Role(guildID, roleID)
+		if err != nil {
+			return false, err
+		}
+		if role.Permissions&int64(permission) != 0 {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// packs a guild list into a json structure
 func packGuilds(guildList []Guild) string {
 	// to whomever sees this function: i know it's very ugly and terrible but i wanna
 	// defend myself for a second here by saying that the way golang does json is very
@@ -623,26 +636,17 @@ func packGuilds(guildList []Guild) string {
 	return jsonString
 }
 
-func logMessage(s *discordgo.Session, v ...interface{}) {
-	log.Println(v...)
-	owner, err := s.User(ownerID)
+// sends an embed
+func sendEmbed(s *discordgo.Session, CID string, embed *discordgo.MessageEmbed) {
+	_, err := s.ChannelMessageSendEmbed(CID, embed)
 	if err != nil {
-		log.Println("[LOG MESSAGE] error getting owner |", err)
-		return
+		logMessage(s, "[SEND EMBED] embed failed to send |", err)
 	}
-	dmChannel, err := s.UserChannelCreate(owner.ID)
-	if err != nil {
-		log.Println("[LOG MESSAGE] error creating channel |", err)
-		return
-	}
-	embed := discordgo.MessageEmbed{
-		Title: fmt.Sprintln(v...),
-		Color: failColor,
-	}
-	sendEmbed(s, dmChannel.ID, &embed)
 }
 
 // ----- LOOP FUNCTIONS
+
+// loops forever; reads from action queue and does subsequent actions
 func queueHandler(s *discordgo.Session) {
 	for {
 		time.Sleep(10 * time.Millisecond)
@@ -692,7 +696,7 @@ func queueHandler(s *discordgo.Session) {
 
 					index, err := indexGID(guildList, GID)
 					if err != nil {
-						logMessage(s, "[ADD BOT] error indexing ID |", err)
+						logMessage(s, "[ADD BOT] error indexing GID |", err)
 					} else {
 						bot := Bot{BID, "unknown", time.Now().Unix()}
 						guildList[index].bots = append(guildList[index].bots, bot)
@@ -705,13 +709,13 @@ func queueHandler(s *discordgo.Session) {
 
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
-						logMessage(s, "[REMOVE BOT] error indexing ID |", err)
+						logMessage(s, "[REMOVE BOT] error indexing GID |", err)
 					} else {
 						indexB, err := indexBID(guildList[indexG].bots, BID)
 						if err != nil {
-							logMessage(s, "[REMOVE BOT] error indexing ID |", err)
+							logMessage(s, "[REMOVE BOT] error indexing BID |", err)
 						} else {
-							guildList[indexG].bots = removeBot(guildList[indexG].bots, indexB)
+							guildList[indexG].bots = append(guildList[indexG].bots[:indexB], guildList[indexG].bots[indexB+1:]...)
 						}
 					}
 
@@ -721,9 +725,9 @@ func queueHandler(s *discordgo.Session) {
 
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
-						logMessage(s, "[REMOVE GUILD] error indexing ID |", err)
+						logMessage(s, "[REMOVE GUILD] error indexing GID |", err)
 					} else {
-						guildList = removeGuild(guildList, indexG)
+						guildList = append(guildList[:indexG], guildList[indexG+1:]...)
 					}
 				}
 
@@ -736,6 +740,8 @@ func queueHandler(s *discordgo.Session) {
 	}
 }
 
+// loops forever; goes through active guild list and checks for new bots,
+// requests presence list of bots, and culls removed bots.
 func requestBots(s *discordgo.Session) {
 	for {
 		time.Sleep(1 * time.Second)
@@ -756,7 +762,7 @@ func requestBots(s *discordgo.Session) {
 			// check if OfflineNotifier is still in guild
 			_, err := s.Guild(guild.ID)
 			if err != nil {
-				logMessage(s, "[REQUEST BOTS] error setting current guild |", err)
+				logMessage(s, "[REQUEST BOTS] error getting guild |", err)
 				if !connected {
 					continue
 				}
@@ -810,8 +816,8 @@ func requestBots(s *discordgo.Session) {
 			}
 			// request member list
 			err = s.RequestGuildMembersList(guild.ID, requestList, 0, "", true)
-			if err != nil && err != errors.New("no websocket connection exists") {
-				logMessage(s, "[REQUEST BOTS] error requesting bots |", err)
+			if err != nil && err != discordgo.ErrWSNotFound {
+				logMessage(s, "[REQUEST BOTS] error requesting bots list |", err)
 			}
 		}
 	}
