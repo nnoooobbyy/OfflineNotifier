@@ -19,18 +19,17 @@ import (
 
 // ----- VARS
 var (
-	botVersion       = "V6.5 | GOLANG"
-	actionQueue      []Request
-	startTime        = time.Now().Unix()
-	startedFunctions = false
-	connected        = false
-	inviteLink       = ""
-	ownerID          = ""
-	defaultColor     = 0x7289da
-	successColor     = 0x76e06e
-	failColor        = 0xe06c6c
-	onlineColor      = 0x43b581
-	offlineColor     = 0x727c8a
+	botVersion        = "V6.6 | GOLANG"
+	actionQueue       []Request
+	startTime         = time.Now().Unix()
+	startedCoroutines = false
+	inviteLink        = ""
+	ownerID           = ""
+	defaultColor      = 0x7289da
+	successColor      = 0x76e06e
+	failColor         = 0xe06c6c
+	onlineColor       = 0x43b581
+	offlineColor      = 0x727c8a
 )
 
 // ----- STRUCTS
@@ -200,30 +199,27 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 
 // called when OfflineNotifier connects to discord
 func connect(s *discordgo.Session, event *discordgo.Connect) {
-	connected = true
 	log.Println("[CONNECTED]")
 }
 
 // called when OfflineNotifier gets disconnected from discord
 func disconnect(s *discordgo.Session, event *discordgo.Disconnect) {
-	connected = false
 	log.Println("[DISCONNECTED]")
 }
 
 // called when discord responds with the ready event
 func ready(s *discordgo.Session, event *discordgo.Ready) {
 	log.Println("[READY]")
-	if !startedFunctions {
+	if !startedCoroutines {
 		log.Println("[GOLANG] starting coroutines...")
 		go requestBots(s)
 		go queueHandler(s)
-		startedFunctions = true
+		startedCoroutines = true
 	}
 }
 
 // called when connection resumes
 func resumed(s *discordgo.Session, event *discordgo.Resumed) {
-	connected = true
 	log.Println("[RESUMED]")
 }
 
@@ -681,78 +677,74 @@ func queueHandler(s *discordgo.Session) {
 				case "ac":
 					GID := request.data[0]
 					CID := request.data[1]
-
-					index, err := indexGID(guildList, GID)
+					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						guild := Guild{ID: GID, bots: nil, CID: CID}
 						guildList = append(guildList, guild)
 					} else {
-						guildList[index].CID = CID
+						guildList[indexG].CID = CID
 					}
-
 				// SET STATUS - [GID, BID, status, changeTimestamp]
 				case "ss":
 					GID := request.data[0]
 					BID := request.data[1]
 					status := request.data[2]
-
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						logMessage(s, "[SET STATUS] error indexing GID |", err)
+						actionQueue = actionQueue[1:]
 						continue
 					}
 					indexB, err := indexBID(guildList[indexG].bots, BID)
 					if err != nil {
 						logMessage(s, "[SET STATUS] error indexing BID |", err)
+						actionQueue = actionQueue[1:]
 						continue
 					}
 					guildList[indexG].bots[indexB].status = status
 					if strings.ToLower(request.data[3]) == "true" {
 						guildList[indexG].bots[indexB].timestamp = time.Now().Unix()
 					}
-
 				// ADD BOT - [GID, BID]
 				case "ab":
 					GID := request.data[0]
 					BID := request.data[1]
-
 					index, err := indexGID(guildList, GID)
 					if err != nil {
 						logMessage(s, "[ADD BOT] error indexing GID |", err)
-					} else {
-						bot := Bot{BID, "unknown", time.Now().Unix()}
-						guildList[index].bots = append(guildList[index].bots, bot)
+						actionQueue = actionQueue[1:]
+						continue
 					}
-
+					bot := Bot{BID, "unknown", time.Now().Unix()}
+					guildList[index].bots = append(guildList[index].bots, bot)
 				// REMOVE BOT - [GID, BID]
 				case "rb":
 					GID := request.data[0]
 					BID := request.data[1]
-
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						logMessage(s, "[REMOVE BOT] error indexing GID |", err)
-					} else {
-						indexB, err := indexBID(guildList[indexG].bots, BID)
-						if err != nil {
-							logMessage(s, "[REMOVE BOT] error indexing BID |", err)
-						} else {
-							guildList[indexG].bots = append(guildList[indexG].bots[:indexB], guildList[indexG].bots[indexB+1:]...)
-						}
+						actionQueue = actionQueue[1:]
+						continue
 					}
-
+					indexB, err := indexBID(guildList[indexG].bots, BID)
+					if err != nil {
+						logMessage(s, "[REMOVE BOT] error indexing BID |", err)
+						actionQueue = actionQueue[1:]
+						continue
+					}
+					guildList[indexG].bots = append(guildList[indexG].bots[:indexB], guildList[indexG].bots[indexB+1:]...)
 				// REMOVE GUILD - [GID]
 				case "rg":
 					GID := request.data[0]
-
 					indexG, err := indexGID(guildList, GID)
 					if err != nil {
 						logMessage(s, "[REMOVE GUILD] error indexing GID |", err)
-					} else {
-						guildList = append(guildList[:indexG], guildList[indexG+1:]...)
+						actionQueue = actionQueue[1:]
+						continue
 					}
+					guildList = append(guildList[:indexG], guildList[indexG+1:]...)
 				}
-
 				// POP ACTION FROM QUEUE
 				actionQueue = actionQueue[1:]
 			}
@@ -785,22 +777,30 @@ func requestBots(s *discordgo.Session) {
 			_, err := s.Guild(guild.ID)
 			if err != nil {
 				logMessage(s, "[REQUEST BOTS] error getting guild |", err)
-				if !connected {
-					continue
-				}
-				addToQueue("rg", [4]string{guild.ID})
 				continue
+				// REMOVED due to not wanting to accidentally remove guilds,
+				// will fix later when the time comes.
+				// if !connected {
+				// 	continue
+				// } else {
+				// 	addToQueue("rg", [4]string{guild.ID})
+				// 	continue
+				// }
 			}
 
 			// check if OfflineNotifier is still in channel
 			_, err = s.Channel(guild.CID)
 			if err != nil {
 				logMessage(s, "[REQUEST BOTS] error setting message channel |", err)
-				if !connected {
-					continue
-				}
-				addToQueue("rg", [4]string{guild.ID})
 				continue
+				// REMOVED due to not wanting to accidentally remove guilds,
+				// will fix later when the time comes.
+				// if !connected {
+				// 	continue
+				// } else {
+				// 	addToQueue("rg", [4]string{guild.ID})
+				// 	continue
+				// }
 			}
 
 			// get member list
