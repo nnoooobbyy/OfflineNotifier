@@ -18,7 +18,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7 | GOLANG"
+	botVersion        = "V7.1 | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
@@ -503,7 +503,6 @@ func listSubscriptions(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 
 		if len(embed[0].Fields) < 25 {
-
 			discordBot, err := s.GuildMember(bot.Guilds[0], bot.ID)
 			if err != nil {
 				logMessage(s, "[LIST SUBSCRIBER] error getting discord bot |", err)
@@ -601,7 +600,7 @@ func subscribe(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	UID := i.Member.User.ID
 
 	var embed []*discordgo.MessageEmbed
-	bot, err := s.User(BID)
+	bot, err := s.GuildMember(i.GuildID, BID)
 	if err != nil {
 		logMessage(s, "[SUBSCRIBE] error getting discord bot |", err)
 		embed = []*discordgo.MessageEmbed{{
@@ -610,17 +609,17 @@ func subscribe(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			Color:       failColor,
 		}}
 	} else {
-		if bot.Bot && bot.ID != s.State.User.ID {
+		if bot.User.Bot && BID != s.State.User.ID {
 			addToQueue("as", [4]string{UID, BID})
 			embed = []*discordgo.MessageEmbed{{
 				Title:       "Subscribe request successful",
-				Description: "You are now subscribed to " + bot.Username,
+				Description: "You are now subscribed to " + bot.User.Username,
 				Color:       successColor,
 			}}
 		} else {
 			embed = []*discordgo.MessageEmbed{{
 				Title:       "Subscribe request failed",
-				Description: bot.Username + " is not a valid bot!",
+				Description: bot.User.Username + " is not a valid bot!",
 				Color:       failColor,
 			}}
 		}
@@ -1040,8 +1039,12 @@ func queueHandler(s *discordgo.Session) {
 					// add BID to guild's bot list
 					guild, exists := guildMap[GID]
 					if exists {
-						guild.Bots = append(guild.Bots, BID)
-						guildMap[GID] = guild
+						// check for duplicate
+						_, err = indexID(guild.Bots, BID)
+						if err != nil {
+							guild.Bots = append(guild.Bots, BID)
+							guildMap[GID] = guild
+						}
 					} else {
 						logMessage(s, "[ADD BOT] error finding guild | not in guild map")
 						actionQueue = actionQueue[1:]
@@ -1051,8 +1054,12 @@ func queueHandler(s *discordgo.Session) {
 					// add GID to bot's guild list
 					bot, exists := botMap[BID]
 					if exists {
-						bot.Guilds = append(bot.Guilds, GID)
-						botMap[BID] = bot
+						// check for duplicate
+						_, err = indexID(bot.Guilds, GID)
+						if err != nil {
+							bot.Guilds = append(bot.Guilds, GID)
+							botMap[BID] = bot
+						}
 					} else {
 						botMap[BID] = Bot{
 							ID:          BID,
@@ -1141,8 +1148,12 @@ func queueHandler(s *discordgo.Session) {
 					bot, exists := botMap[BID]
 					if exists {
 						// add SID to bot's subscriber list
-						bot.Subscribers = append(bot.Subscribers, SID)
-						botMap[BID] = bot
+						// check for duplicate
+						_, err = indexID(bot.Subscribers, SID)
+						if err != nil {
+							bot.Subscribers = append(bot.Subscribers, SID)
+							botMap[BID] = bot
+						}
 					} else {
 						logMessage(s, "[ADD SUBSCRIBER] error finding bot | not in bot map")
 						actionQueue = actionQueue[1:]
@@ -1152,14 +1163,18 @@ func queueHandler(s *discordgo.Session) {
 					// add BID to subscriber's bot list
 					subscriber, exists := subscriberMap[SID]
 					if exists {
-						subscriber.Bots = append(subscriber.Bots, BID)
+						// check for duplicate
+						_, err = indexID(subscriber.Bots, BID)
+						if err != nil {
+							subscriber.Bots = append(subscriber.Bots, BID)
+							subscriberMap[SID] = subscriber
+						}
 					} else {
-						subscriber = Subscriber{
+						subscriberMap[SID] = Subscriber{
 							ID:   SID,
 							Bots: []string{BID},
 						}
 					}
-					subscriberMap[SID] = subscriber
 				// REMOVE SUBSCRIBER [SID, BID]
 				case "rs":
 					SID := request.data[0]
