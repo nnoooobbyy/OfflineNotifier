@@ -1,4 +1,4 @@
-## Discord bot that can tell you whenever a bot in a server goes offline or online
+# Discord bot that can tell you whenever a bot in a server goes offline or online
 OfflineNotifier makes it easy to keep track of when a bot goes down. It's useful for ensuring upkeep of you or others' bots.
 
 **Join [nooby's bot sanctuary](https://discord.gg/YDRKdkh) for support.**
@@ -18,12 +18,12 @@ OfflineNotifier makes it easy to keep track of when a bot goes down. It's useful
 - /watch set - Set the channel OfflineNotifier will send messages in & starts watching a server
 - /watch stop - Stops watching a server
 
-### Dependencies
+## Dependencies
 [DiscordGo](github.com/bwmarrin/discordgo)
 [GoDotEnv](https://github.com/joho/godotenv)
 [errors](github.com/pkg/errors)
 
-### Build
+## Build
 
 This assumes you already have a working Go environment setup and that
 dependencies are correctly installed on your system.
@@ -35,7 +35,7 @@ code.
 go build
 ```
 
-### Requirements
+## Requirements
 
 OfflineNotifier requires the following files/folders within the OfflineNotifier folder.
 
@@ -53,7 +53,7 @@ To do this, open a Terminal window and run:
 1. `cp data.json.example data.json`
 2. `cp OfflineNotifier.env.example OfflineNotifier.env` 
 
-### Usage
+## Usage
 
 The below example shows how to start the bot from the OfflineNotifier folder.
 
