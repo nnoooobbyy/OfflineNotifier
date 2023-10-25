@@ -61,7 +61,7 @@ type Subscriber struct {
 // -----  MAIN
 func main() {
 	// LOGGING
-	f, err := os.OpenFile("./logs/"+time.Now().Format("2006-01-02 15:04:05 MST"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	f, err := os.OpenFile("./logs/"+time.Now().Format("2006-01-02 15:04:05 MST")+".log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
