@@ -69,7 +69,7 @@ func main() {
 	log.SetOutput(f)
 
 	// LOADING ENV
-	err = godotenv.Load("./Carbon.env")
+	err = godotenv.Load("./OfflineNotifier.env")
 	if err != nil {
 		log.Fatal("[GODOTENV] error loading .env file |", err)
 		os.Exit(1)
