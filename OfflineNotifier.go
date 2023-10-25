@@ -20,7 +20,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.4 | GOLANG"
+	botVersion        = "V7.5 | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
@@ -69,7 +69,7 @@ func main() {
 	log.SetOutput(f)
 
 	// LOADING ENV
-	err = godotenv.Load("./OfflineNotifier.env")
+	err = godotenv.Load("./Carbon.env")
 	if err != nil {
 		log.Fatal("[GODOTENV] error loading .env file |", err)
 		os.Exit(1)
@@ -250,8 +250,8 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 	log.Println("[READY]")
 	if !startedCoroutines {
 		log.Println("[GOLANG] starting coroutines...")
-		requestBotsTicker := time.NewTicker(1 * time.Second)
-		queueHandlerTicker := time.NewTicker(10 * time.Millisecond)
+		requestBotsTicker := time.NewTicker(time.Duration(1) * time.Second)
+		queueHandlerTicker := time.NewTicker(time.Duration(10) * time.Millisecond)
 		go func() {
 			for range requestBotsTicker.C {
 				requestBots(s)
@@ -363,7 +363,7 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 				if user.Username == userName {
 					subscriber, err := getSubscriber(s, user.ID)
 					if err != nil {
-						logMessage(s, "[REACTION] error getting json bot |", err)
+						logMessage(s, "[REACTION] error getting json subscriber |", err)
 						return
 					}
 					bots = subscriber.Bots
@@ -1083,334 +1083,332 @@ func makeBotList(s *discordgo.Session, embed *discordgo.MessageEmbed, bots []str
 	return nil
 }
 
-// ----- LOOP FUNCTIONS
+// ----- TICKER FUNCTIONS
 
-// loops forever; reads from action queue and does subsequent actions
+// reads from action queue and does subsequent actions
 func queueHandler(s *discordgo.Session) {
-	for {
-		if len(actionQueue) > 0 {
-			// get guild map
-			guildMap, err := getGuildMap(s)
-			if err != nil {
-				logMessage(s, "[QUEUE HANDLER] error getting guild map |", err)
-				continue
-			}
+	if len(actionQueue) > 0 {
+		// get guild map
+		guildMap, err := getGuildMap(s)
+		if err != nil {
+			logMessage(s, "[QUEUE HANDLER] error getting guild map |", err)
+			return
+		}
 
-			// get bot map
-			botMap, err := getBotMap(s)
-			if err != nil {
-				logMessage(s, "[QUEUE HANDLER] error getting bot map |", err)
-				continue
-			}
+		// get bot map
+		botMap, err := getBotMap(s)
+		if err != nil {
+			logMessage(s, "[QUEUE HANDLER] error getting bot map |", err)
+			return
+		}
 
-			// get subscriber map
-			subscriberMap, err := getSubscriberMap(s)
-			if err != nil {
-				logMessage(s, "[QUEUE HANDLER] error getting subscriber map |", err)
-				continue
-			}
+		// get subscriber map
+		subscriberMap, err := getSubscriberMap(s)
+		if err != nil {
+			logMessage(s, "[QUEUE HANDLER] error getting subscriber map |", err)
+			return
+		}
 
-			// go through action queue
-			for len(actionQueue) > 0 {
-				request := actionQueue[0]
-				switch request.action {
-				// ASSIGN CHANNEL - [GID, CID]
-				case "ac":
-					GID := request.data[0]
-					CID := request.data[1]
+		// go through action queue
+		for len(actionQueue) > 0 {
+			request := actionQueue[0]
+			switch request.action {
+			// ASSIGN CHANNEL - [GID, CID]
+			case "ac":
+				GID := request.data[0]
+				CID := request.data[1]
 
-					guild, exists := guildMap[GID]
-					if exists {
-						guild.CID = CID
-						guildMap[GID] = guild
-					} else {
-						guild = Guild{
-							ID:   GID,
-							CID:  CID,
-							Bots: []string{},
-						}
-						guildMap[GID] = guild
+				guild, exists := guildMap[GID]
+				if exists {
+					guild.CID = CID
+					guildMap[GID] = guild
+				} else {
+					guild = Guild{
+						ID:   GID,
+						CID:  CID,
+						Bots: []string{},
 					}
-				// REMOVE GUILD - [GID]
-				case "rg":
-					GID := request.data[0]
+					guildMap[GID] = guild
+				}
+			// REMOVE GUILD - [GID]
+			case "rg":
+				GID := request.data[0]
 
-					_, exists := guildMap[GID]
-					if exists {
-						// loop through guild's bot list
-						for _, BID := range guildMap[GID].Bots {
-							bot, exists := botMap[BID]
-							if exists {
-								i, err := indexID(bot.Guilds, GID)
-								if err != nil {
-									logMessage(s, "[REMOVE GUILD] error indexing GID |", err)
-									continue
-								}
-								// remove GID from bot's guild list
-								if len(bot.Guilds) == 1 {
-									// loop through bot's subscriber list
-									for _, SID := range bot.Subscribers {
-										subscriber, exists := subscriberMap[SID]
-										if exists {
-											i, err := indexID(subscriber.Bots, BID)
-											if err != nil {
-												logMessage(s, "[REMOVE GUILD] error indexing BID |", err)
-												continue
-											}
-											// remove BID from subscriber's bot list
-											if len(subscriber.Bots) == 1 {
-												delete(subscriberMap, SID)
-											} else {
-												subscriber.Bots[i] = subscriber.Bots[len(subscriber.Bots)-1]
-												subscriber.Bots = subscriber.Bots[:len(subscriber.Bots)-1]
-												subscriberMap[SID] = subscriber
-											}
-										} else {
-											logMessage(s, "[REMOVE GUILD] error finding subscriber | not in subscriber map")
+				_, exists := guildMap[GID]
+				if exists {
+					// loop through guild's bot list
+					for _, BID := range guildMap[GID].Bots {
+						bot, exists := botMap[BID]
+						if exists {
+							i, err := indexID(bot.Guilds, GID)
+							if err != nil {
+								logMessage(s, "[REMOVE GUILD] error indexing GID |", err)
+								continue
+							}
+							// remove GID from bot's guild list
+							if len(bot.Guilds) == 1 {
+								// loop through bot's subscriber list
+								for _, SID := range bot.Subscribers {
+									subscriber, exists := subscriberMap[SID]
+									if exists {
+										i, err := indexID(subscriber.Bots, BID)
+										if err != nil {
+											logMessage(s, "[REMOVE GUILD] error indexing BID |", err)
 											continue
 										}
+										// remove BID from subscriber's bot list
+										if len(subscriber.Bots) == 1 {
+											delete(subscriberMap, SID)
+										} else {
+											subscriber.Bots[i] = subscriber.Bots[len(subscriber.Bots)-1]
+											subscriber.Bots = subscriber.Bots[:len(subscriber.Bots)-1]
+											subscriberMap[SID] = subscriber
+										}
+									} else {
+										logMessage(s, "[REMOVE GUILD] error finding subscriber | not in subscriber map")
+										continue
 									}
-									delete(botMap, BID)
+								}
+								delete(botMap, BID)
+							} else {
+								bot.Guilds[i] = bot.Guilds[len(bot.Guilds)-1]
+								bot.Guilds = bot.Guilds[:len(bot.Guilds)-1]
+								botMap[BID] = bot
+							}
+						} else {
+							logMessage(s, "[REMOVE GUILD] error finding bot | not in bot map")
+							actionQueue = actionQueue[1:]
+							continue
+						}
+					}
+					// delete guild
+					delete(guildMap, GID)
+				} else {
+					logMessage(s, "[REMOVE GUILD] error finding guild | not in guild map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
+			// SET STATUS - [BID, Status, changeTimestamp]
+			case "ss":
+				BID := request.data[0]
+				Status := request.data[1]
+
+				bot, exists := botMap[BID]
+				if exists {
+					bot.Status = Status
+					if request.data[2] == "true" {
+						bot.Timestamp = time.Now().Unix()
+					}
+					botMap[BID] = bot
+				} else {
+					logMessage(s, "[SET STATUS] error finding bot | not in bot map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
+			// ADD BOT - [GID, BID]
+			case "ab":
+				GID := request.data[0]
+				BID := request.data[1]
+
+				// add BID to guild's bot list
+				guild, exists := guildMap[GID]
+				if exists {
+					// check for duplicate
+					_, err = indexID(guild.Bots, BID)
+					if err != nil {
+						guild.Bots = append(guild.Bots, BID)
+						guildMap[GID] = guild
+					}
+				} else {
+					logMessage(s, "[ADD BOT] error finding guild | not in guild map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
+
+				// add GID to bot's guild list
+				bot, exists := botMap[BID]
+				if exists {
+					// check for duplicate
+					_, err = indexID(bot.Guilds, GID)
+					if err != nil {
+						bot.Guilds = append(bot.Guilds, GID)
+						botMap[BID] = bot
+					}
+				} else {
+					botMap[BID] = Bot{
+						ID:          BID,
+						Guilds:      []string{GID},
+						Subscribers: []string{},
+						Status:      "unknown",
+						Timestamp:   time.Now().Unix(),
+					}
+				}
+			// REMOVE BOT - [GID, BID]
+			case "rb":
+				GID := request.data[0]
+				BID := request.data[1]
+
+				guild, exists := guildMap[GID]
+				if exists {
+					i, err := indexID(guild.Bots, BID)
+					if err != nil {
+						logMessage(s, "[REMOVE BOT] error indexing BID |", err)
+						actionQueue = actionQueue[1:]
+						continue
+					}
+					// remove BID from guild's bot list
+					if len(guild.Bots) == 1 {
+						guild.Bots = []string{}
+						guildMap[GID] = guild
+					} else {
+						guild.Bots[i] = guild.Bots[len(guild.Bots)-1]
+						guild.Bots = guild.Bots[:len(guild.Bots)-1]
+						guildMap[GID] = guild
+					}
+				} else {
+					logMessage(s, "[REMOVE BOT] error finding guild | not in guild map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
+
+				bot, exists := botMap[BID]
+				if exists {
+					i, err := indexID(bot.Guilds, GID)
+					if err != nil {
+						logMessage(s, "[REMOVE BOT] error indexing GID |", err)
+						actionQueue = actionQueue[1:]
+						continue
+					}
+					// remove GID from bot's guild list
+					if len(bot.Guilds) == 1 {
+						// loop through bot's subscriber list
+						for _, SID := range bot.Subscribers {
+							subscriber, exists := subscriberMap[SID]
+							if exists {
+								i, err := indexID(subscriber.Bots, BID)
+								if err != nil {
+									logMessage(s, "[REMOVE BOT] error indexing BID |", err)
+									continue
+								}
+								// remove BID from subscriber's bot list
+								if len(subscriber.Bots) == 1 {
+									delete(subscriberMap, SID)
 								} else {
-									bot.Guilds[i] = bot.Guilds[len(bot.Guilds)-1]
-									bot.Guilds = bot.Guilds[:len(bot.Guilds)-1]
-									botMap[BID] = bot
+									subscriber.Bots[i] = subscriber.Bots[len(subscriber.Bots)-1]
+									subscriber.Bots = subscriber.Bots[:len(subscriber.Bots)-1]
+									subscriberMap[SID] = subscriber
 								}
 							} else {
-								logMessage(s, "[REMOVE GUILD] error finding bot | not in bot map")
-								actionQueue = actionQueue[1:]
+								logMessage(s, "[REMOVE BOT] error finding subscriber | not in subscriber map")
 								continue
 							}
 						}
-						// delete guild
-						delete(guildMap, GID)
+						delete(botMap, BID)
 					} else {
-						logMessage(s, "[REMOVE GUILD] error finding guild | not in guild map")
-						actionQueue = actionQueue[1:]
-						continue
-					}
-				// SET STATUS - [BID, Status, changeTimestamp]
-				case "ss":
-					BID := request.data[0]
-					Status := request.data[1]
-
-					bot, exists := botMap[BID]
-					if exists {
-						bot.Status = Status
-						if request.data[2] == "true" {
-							bot.Timestamp = time.Now().Unix()
-						}
+						bot.Guilds[i] = bot.Guilds[len(bot.Guilds)-1]
+						bot.Guilds = bot.Guilds[:len(bot.Guilds)-1]
 						botMap[BID] = bot
-					} else {
-						logMessage(s, "[SET STATUS] error finding bot | not in bot map")
-						actionQueue = actionQueue[1:]
-						continue
 					}
-				// ADD BOT - [GID, BID]
-				case "ab":
-					GID := request.data[0]
-					BID := request.data[1]
+				} else {
+					logMessage(s, "[ADD BOT] error finding bot | not in bot map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
+			// ADD SUBSCRIBER [SID, BID]
+			case "as":
+				SID := request.data[0]
+				BID := request.data[1]
 
-					// add BID to guild's bot list
-					guild, exists := guildMap[GID]
-					if exists {
-						// check for duplicate
-						_, err = indexID(guild.Bots, BID)
-						if err != nil {
-							guild.Bots = append(guild.Bots, BID)
-							guildMap[GID] = guild
-						}
-					} else {
-						logMessage(s, "[ADD BOT] error finding guild | not in guild map")
-						actionQueue = actionQueue[1:]
-						continue
+				bot, exists := botMap[BID]
+				if exists {
+					// add SID to bot's subscriber list
+					// check for duplicate
+					_, err = indexID(bot.Subscribers, SID)
+					if err != nil {
+						bot.Subscribers = append(bot.Subscribers, SID)
+						botMap[BID] = bot
 					}
+				} else {
+					logMessage(s, "[ADD SUBSCRIBER] error finding bot | not in bot map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
 
-					// add GID to bot's guild list
-					bot, exists := botMap[BID]
-					if exists {
-						// check for duplicate
-						_, err = indexID(bot.Guilds, GID)
-						if err != nil {
-							bot.Guilds = append(bot.Guilds, GID)
-							botMap[BID] = bot
-						}
-					} else {
-						botMap[BID] = Bot{
-							ID:          BID,
-							Guilds:      []string{GID},
-							Subscribers: []string{},
-							Status:      "unknown",
-							Timestamp:   time.Now().Unix(),
-						}
+				// add BID to subscriber's bot list
+				subscriber, exists := subscriberMap[SID]
+				if exists {
+					// check for duplicate
+					_, err = indexID(subscriber.Bots, BID)
+					if err != nil {
+						subscriber.Bots = append(subscriber.Bots, BID)
+						subscriberMap[SID] = subscriber
 					}
-				// REMOVE BOT - [GID, BID]
-				case "rb":
-					GID := request.data[0]
-					BID := request.data[1]
-
-					guild, exists := guildMap[GID]
-					if exists {
-						i, err := indexID(guild.Bots, BID)
-						if err != nil {
-							logMessage(s, "[REMOVE BOT] error indexing BID |", err)
-							actionQueue = actionQueue[1:]
-							continue
-						}
-						// remove BID from guild's bot list
-						if len(guild.Bots) == 1 {
-							guild.Bots = []string{}
-							guildMap[GID] = guild
-						} else {
-							guild.Bots[i] = guild.Bots[len(guild.Bots)-1]
-							guild.Bots = guild.Bots[:len(guild.Bots)-1]
-							guildMap[GID] = guild
-						}
-					} else {
-						logMessage(s, "[REMOVE BOT] error finding guild | not in guild map")
-						actionQueue = actionQueue[1:]
-						continue
-					}
-
-					bot, exists := botMap[BID]
-					if exists {
-						i, err := indexID(bot.Guilds, GID)
-						if err != nil {
-							logMessage(s, "[REMOVE BOT] error indexing GID |", err)
-							actionQueue = actionQueue[1:]
-							continue
-						}
-						// remove GID from bot's guild list
-						if len(bot.Guilds) == 1 {
-							// loop through bot's subscriber list
-							for _, SID := range bot.Subscribers {
-								subscriber, exists := subscriberMap[SID]
-								if exists {
-									i, err := indexID(subscriber.Bots, BID)
-									if err != nil {
-										logMessage(s, "[REMOVE BOT] error indexing BID |", err)
-										continue
-									}
-									// remove BID from subscriber's bot list
-									if len(subscriber.Bots) == 1 {
-										delete(subscriberMap, SID)
-									} else {
-										subscriber.Bots[i] = subscriber.Bots[len(subscriber.Bots)-1]
-										subscriber.Bots = subscriber.Bots[:len(subscriber.Bots)-1]
-										subscriberMap[SID] = subscriber
-									}
-								} else {
-									logMessage(s, "[REMOVE BOT] error finding subscriber | not in subscriber map")
-									continue
-								}
-							}
-							delete(botMap, BID)
-						} else {
-							bot.Guilds[i] = bot.Guilds[len(bot.Guilds)-1]
-							bot.Guilds = bot.Guilds[:len(bot.Guilds)-1]
-							botMap[BID] = bot
-						}
-					} else {
-						logMessage(s, "[ADD BOT] error finding bot | not in bot map")
-						actionQueue = actionQueue[1:]
-						continue
-					}
-				// ADD SUBSCRIBER [SID, BID]
-				case "as":
-					SID := request.data[0]
-					BID := request.data[1]
-
-					bot, exists := botMap[BID]
-					if exists {
-						// add SID to bot's subscriber list
-						// check for duplicate
-						_, err = indexID(bot.Subscribers, SID)
-						if err != nil {
-							bot.Subscribers = append(bot.Subscribers, SID)
-							botMap[BID] = bot
-						}
-					} else {
-						logMessage(s, "[ADD SUBSCRIBER] error finding bot | not in bot map")
-						actionQueue = actionQueue[1:]
-						continue
-					}
-
-					// add BID to subscriber's bot list
-					subscriber, exists := subscriberMap[SID]
-					if exists {
-						// check for duplicate
-						_, err = indexID(subscriber.Bots, BID)
-						if err != nil {
-							subscriber.Bots = append(subscriber.Bots, BID)
-							subscriberMap[SID] = subscriber
-						}
-					} else {
-						subscriberMap[SID] = Subscriber{
-							ID:   SID,
-							Bots: []string{BID},
-						}
-					}
-				// REMOVE SUBSCRIBER [SID, BID]
-				case "rs":
-					SID := request.data[0]
-					BID := request.data[1]
-
-					bot, exists := botMap[BID]
-					if exists {
-						i, err := indexID(bot.Subscribers, SID)
-						if err != nil {
-							logMessage(s, "[REMOVE SUBSCRIBER] error indexing SID |", err)
-							actionQueue = actionQueue[1:]
-							continue
-						}
-						// remove SID from bot's subscriber list
-						if len(bot.Subscribers) == 1 {
-							bot.Subscribers = []string{}
-							botMap[BID] = bot
-						} else {
-							bot.Subscribers[i] = bot.Subscribers[len(bot.Subscribers)-1]
-							bot.Subscribers = bot.Subscribers[:len(bot.Subscribers)-1]
-							botMap[BID] = bot
-						}
-					} else {
-						logMessage(s, "[REMOVE SUBSCRIBER] error finding bot | not in bot map")
-						actionQueue = actionQueue[1:]
-						continue
-					}
-
-					subscriber, exists := subscriberMap[SID]
-					if exists {
-						i, err := indexID(subscriber.Bots, BID)
-						if err != nil {
-							logMessage(s, "[REMOVE SUBSCRIBER] error indexing BID |", err)
-							actionQueue = actionQueue[1:]
-							continue
-						}
-						// remove BID from subscriber's bot list
-						if len(subscriber.Bots) == 1 {
-							delete(subscriberMap, SID)
-						} else {
-							subscriber.Bots[i] = subscriber.Bots[len(subscriber.Bots)-1]
-							subscriber.Bots = subscriber.Bots[:len(subscriber.Bots)-1]
-							subscriberMap[SID] = subscriber
-						}
-					} else {
-						logMessage(s, "[REMOVE SUBSCRIBER] error finding subscriber | not in subscriber map")
-						actionQueue = actionQueue[1:]
-						continue
+				} else {
+					subscriberMap[SID] = Subscriber{
+						ID:   SID,
+						Bots: []string{BID},
 					}
 				}
-				// POP ACTION FROM QUEUE
-				actionQueue = actionQueue[1:]
+			// REMOVE SUBSCRIBER [SID, BID]
+			case "rs":
+				SID := request.data[0]
+				BID := request.data[1]
+
+				bot, exists := botMap[BID]
+				if exists {
+					i, err := indexID(bot.Subscribers, SID)
+					if err != nil {
+						logMessage(s, "[REMOVE SUBSCRIBER] error indexing SID |", err)
+						actionQueue = actionQueue[1:]
+						continue
+					}
+					// remove SID from bot's subscriber list
+					if len(bot.Subscribers) == 1 {
+						bot.Subscribers = []string{}
+						botMap[BID] = bot
+					} else {
+						bot.Subscribers[i] = bot.Subscribers[len(bot.Subscribers)-1]
+						bot.Subscribers = bot.Subscribers[:len(bot.Subscribers)-1]
+						botMap[BID] = bot
+					}
+				} else {
+					logMessage(s, "[REMOVE SUBSCRIBER] error finding bot | not in bot map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
+
+				subscriber, exists := subscriberMap[SID]
+				if exists {
+					i, err := indexID(subscriber.Bots, BID)
+					if err != nil {
+						logMessage(s, "[REMOVE SUBSCRIBER] error indexing BID |", err)
+						actionQueue = actionQueue[1:]
+						continue
+					}
+					// remove BID from subscriber's bot list
+					if len(subscriber.Bots) == 1 {
+						delete(subscriberMap, SID)
+					} else {
+						subscriber.Bots[i] = subscriber.Bots[len(subscriber.Bots)-1]
+						subscriber.Bots = subscriber.Bots[:len(subscriber.Bots)-1]
+						subscriberMap[SID] = subscriber
+					}
+				} else {
+					logMessage(s, "[REMOVE SUBSCRIBER] error finding subscriber | not in subscriber map")
+					actionQueue = actionQueue[1:]
+					continue
+				}
 			}
-			jsonData, err := json.Marshal(map[string]interface{}{"guilds": guildMap, "bots": botMap, "subscribers": subscriberMap})
-			if err != nil {
-				logMessage(s, "[QUEUE HANDLER] error marshaling json |", err)
-			}
-			ioutil.WriteFile("data.json", jsonData, 0755)
-			if err != nil {
-				logMessage(s, "[QUEUE HANDLER] error writing json |", err)
-			}
+			// POP ACTION FROM QUEUE
+			actionQueue = actionQueue[1:]
+		}
+		jsonData, err := json.Marshal(map[string]interface{}{"guilds": guildMap, "bots": botMap, "subscribers": subscriberMap})
+		if err != nil {
+			logMessage(s, "[QUEUE HANDLER] error marshaling json |", err)
+		}
+		ioutil.WriteFile("data.json", jsonData, 0755)
+		if err != nil {
+			logMessage(s, "[QUEUE HANDLER] error writing json |", err)
 		}
 	}
 }
@@ -1418,74 +1416,72 @@ func queueHandler(s *discordgo.Session) {
 // loops forever; goes through active guild list and checks for new bots,
 // requests presence list of bots, and culls removed bots.
 func requestBots(s *discordgo.Session) {
-	for {
-		// get guild map
-		guildMap, err := getGuildMap(s)
+	// get guild map
+	guildMap, err := getGuildMap(s)
+	if err != nil {
+		logMessage(s, "[REQUEST BOTS] error getting guild map |", err)
+		return
+	}
+
+	// update presence
+	botMap, err := getBotMap(s)
+	if err != nil {
+		logMessage(s, "[REQUEST BOTS] error getting bot map |", err)
+		return
+	}
+	s.UpdateWatchStatus(0, fmt.Sprint(len(botMap), " bots"))
+
+	// range through guilds
+	for GID, guild := range guildMap {
+		// check if OfflineNotifier is still in guild
+		_, err := s.Guild(GID)
 		if err != nil {
-			logMessage(s, "[REQUEST BOTS] error getting guild map |", err)
+			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err)
 			continue
 		}
 
-		// update presence
-		botMap, err := getBotMap(s)
+		// check if OfflineNotifier is still in channel
+		_, err = s.Channel(guild.CID)
 		if err != nil {
-			logMessage(s, "[REQUEST BOTS] error getting bot map |", err)
+			logMessage(s, "[REQUEST BOTS] error setting message channel |", err, "| removing guild...")
+			addToQueue("rg", [4]string{guild.ID})
 			continue
 		}
-		s.UpdateWatchStatus(0, fmt.Sprint(len(botMap), " bots"))
 
-		// range through guilds
-		for GID, guild := range guildMap {
-			// check if OfflineNotifier is still in guild
-			_, err := s.Guild(GID)
-			if err != nil {
-				logMessage(s, "[REQUEST BOTS] error getting discord guild |", err)
-				continue
-			}
+		// get member list
+		memberList, err := s.GuildMembers(GID, "", 1000)
+		if err != nil {
+			logMessage(s, "[REQUEST BOTS] error getting member list |", err)
+			continue
+		}
 
-			// check if OfflineNotifier is still in channel
-			_, err = s.Channel(guild.CID)
-			if err != nil {
-				logMessage(s, "[REQUEST BOTS] error setting message channel |", err, "| removing guild...")
-				addToQueue("rg", [4]string{guild.ID})
-				continue
-			}
-
-			// get member list
-			memberList, err := s.GuildMembers(GID, "", 1000)
-			if err != nil {
-				logMessage(s, "[REQUEST BOTS] error getting member list |", err)
-				continue
-			}
-
-			var bots = guild.Bots
-			// add bots to request list
-			for _, member := range memberList {
-				if member.User.Bot && member.User.ID != s.State.User.ID {
-					i, err := indexID(bots, member.User.ID)
-					if err != nil {
-						// bot is not in data yet, add them
-						addToQueue("ab", [4]string{guild.ID, member.User.ID})
-						continue
-					}
-					// pop element from list
-					if len(bots) != 0 {
-						bots[len(bots)-1], bots[i] = bots[i], bots[len(bots)-1]
-						bots = bots[:len(bots)-1]
-					}
+		var bots = guild.Bots
+		// add bots to request list
+		for _, member := range memberList {
+			if member.User.Bot && member.User.ID != s.State.User.ID {
+				i, err := indexID(bots, member.User.ID)
+				if err != nil {
+					// bot is not in data yet, add them
+					addToQueue("ab", [4]string{guild.ID, member.User.ID})
+					continue
+				}
+				// pop element from list
+				if len(bots) != 0 {
+					bots[len(bots)-1], bots[i] = bots[i], bots[len(bots)-1]
+					bots = bots[:len(bots)-1]
 				}
 			}
+		}
 
-			// cull remaining bots
-			for _, cullBot := range bots {
-				addToQueue("rb", [4]string{guild.ID, cullBot})
-			}
+		// cull remaining bots
+		for _, cullBot := range bots {
+			addToQueue("rb", [4]string{guild.ID, cullBot})
+		}
 
-			// request bot list
-			err = s.RequestGuildMembersList(GID, guild.Bots, 0, "", true)
-			if err != nil && err != discordgo.ErrWSNotFound {
-				logMessage(s, "[REQUEST BOTS] error requesting bots list |", err)
-			}
+		// request bot list
+		err = s.RequestGuildMembersList(GID, guild.Bots, 0, "", true)
+		if err != nil && err != discordgo.ErrWSNotFound {
+			logMessage(s, "[REQUEST BOTS] error requesting bots list |", err)
 		}
 	}
 }
