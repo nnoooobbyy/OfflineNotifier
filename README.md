@@ -13,7 +13,7 @@ OfflineNotifier makes it easy to keep track of when a bot goes down. It's useful
 - /notify subscribe - [MUST ALLOW DMs] Subscribes to a bot
 - /notify unsubscribe - Unsubscribes from a bot
 - /privacy - Sends OfflineNotifier's privacy policy
-- /stats - shows stats about OfflineNotifier
+- /stats - Shows stats about OfflineNotifier
 - /support - Need help with OfflineNotifier? Join this server!
 - /watch set - Set the channel OfflineNotifier will send messages in & starts watching a server
 - /watch stop - Stops watching a server
