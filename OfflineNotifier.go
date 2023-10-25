@@ -18,7 +18,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.1 | GOLANG"
+	botVersion        = "V7.2 | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
@@ -67,7 +67,7 @@ func main() {
 	log.SetOutput(f)
 
 	// LOADING ENV
-	err = godotenv.Load("./OfflineNotifier.env")
+	err = godotenv.Load("./Carbon.env")
 	if err != nil {
 		log.Fatal("[GODOTENV] error loading .env file |", err)
 		os.Exit(1)
@@ -157,6 +157,11 @@ func main() {
 				Type:        discordgo.ChatApplicationCommand,
 			},
 			{
+				Name:        "shutdown",
+				Description: "Shuts down OfflineNotifier",
+				Type:        discordgo.ChatApplicationCommand,
+			},
+			{
 				Name:        "stats",
 				Description: "Shows stats about OfflineNotifier",
 				Type:        discordgo.ChatApplicationCommand,
@@ -197,10 +202,21 @@ func main() {
 	}
 
 	// write commands
-	_, err = discord.ApplicationCommandBulkOverwrite(discord.State.User.ID, "", commands)
+	createdCommands, err := discord.ApplicationCommandBulkOverwrite(discord.State.User.ID, "", commands)
 	if err != nil {
 		log.Println("[COMMAND WRITE] error writing commands |", err)
 		os.Exit(1)
+	}
+
+	for _, command := range createdCommands {
+		if command.Name == "shutdown" {
+			appID := command.ApplicationID
+			cmdID := command.ID
+			GID := command.GuildID
+			permissions := []*discordgo.ApplicationCommandPermissions{{ID: ownerID, Type: 2, Permission: true}}
+			permissionsList := discordgo.ApplicationCommandPermissionsList{Permissions: permissions}
+			discord.ApplicationCommandPermissionsEdit(appID, GID, cmdID, &permissionsList)
+		}
 	}
 
 	// wait here until CTRL-C or other term signal is received
@@ -231,7 +247,7 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 	}
 
 	for _, BID := range guild.Bots {
-		bot, err := s.User(BID)
+		bot, err := s.GuildMember(guild.ID, BID)
 		if err != nil {
 			logMessage(s, "[CHECK OFFLINE] error getting bot |", err)
 			continue
@@ -248,7 +264,7 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 				case "offline":
 					// back online
 					embed = &discordgo.MessageEmbed{
-						Title:       (bot.Username + " is back online"),
+						Title:       (bot.User.Username + " is back online"),
 						Description: "```TOTAL DOWNTIME\n" + deltaTime + "```",
 						Color:       onlineColor,
 						Timestamp:   time.Now().UTC().Format(time.RFC3339),
@@ -256,7 +272,7 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 				default:
 					// now offline
 					embed = &discordgo.MessageEmbed{
-						Title:       (bot.Username + " is now offline"),
+						Title:       (bot.User.Username + " is now offline"),
 						Description: "```TOTAL UPTIME\n" + deltaTime + "```",
 						Color:       offlineColor,
 						Timestamp:   time.Now().UTC().Format(time.RFC3339),
@@ -322,6 +338,7 @@ func resumed(s *discordgo.Session, event *discordgo.Resumed) {
 // - subscribe [bot]
 // - unsubscribe [bot]
 // privacy
+// shutdown
 // stats
 // support
 // watch
@@ -352,6 +369,8 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 	case "privacy":
 		privacy(s, i)
+	case "shutdown":
+		shutdown(s, i)
 	case "stats":
 		stats(s, i)
 	case "support":
@@ -539,6 +558,19 @@ func privacy(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	responseData := &discordgo.InteractionResponseData{Embeds: embed}
 	response := &discordgo.InteractionResponse{Type: 4, Data: responseData}
 	go s.InteractionRespond(i.Interaction, response)
+}
+
+func shutdown(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	embed := []*discordgo.MessageEmbed{
+		{
+			Title: "Shutting down...",
+			Color: defaultColor,
+		},
+	}
+	responseData := &discordgo.InteractionResponseData{Embeds: embed}
+	response := &discordgo.InteractionResponse{Type: 4, Data: responseData}
+	go s.InteractionRespond(i.Interaction, response)
+	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 }
 
 // shows stats about OfflineNotifier
