@@ -20,7 +20,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.3 | GOLANG"
+	botVersion        = "V7.4 | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
@@ -69,7 +69,7 @@ func main() {
 	log.SetOutput(f)
 
 	// LOADING ENV
-	err = godotenv.Load("./OfflineNotifier.env")
+	err = godotenv.Load("./Carbon.env")
 	if err != nil {
 		log.Fatal("[GODOTENV] error loading .env file |", err)
 		os.Exit(1)
@@ -250,8 +250,18 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 	log.Println("[READY]")
 	if !startedCoroutines {
 		log.Println("[GOLANG] starting coroutines...")
-		go requestBots(s)
-		go queueHandler(s)
+		requestBotsTicker := time.NewTicker(1 * time.Second)
+		queueHandlerTicker := time.NewTicker(10 * time.Millisecond)
+		go func() {
+			for range requestBotsTicker.C {
+				requestBots(s)
+			}
+		}()
+		go func() {
+			for range queueHandlerTicker.C {
+				queueHandler(s)
+			}
+		}()
 		startedCoroutines = true
 	}
 }
@@ -1078,7 +1088,6 @@ func makeBotList(s *discordgo.Session, embed *discordgo.MessageEmbed, bots []str
 // loops forever; reads from action queue and does subsequent actions
 func queueHandler(s *discordgo.Session) {
 	for {
-		time.Sleep(10 * time.Millisecond)
 		if len(actionQueue) > 0 {
 			// get guild map
 			guildMap, err := getGuildMap(s)
@@ -1410,8 +1419,6 @@ func queueHandler(s *discordgo.Session) {
 // requests presence list of bots, and culls removed bots.
 func requestBots(s *discordgo.Session) {
 	for {
-		time.Sleep(1 * time.Second)
-
 		// get guild map
 		guildMap, err := getGuildMap(s)
 		if err != nil {
