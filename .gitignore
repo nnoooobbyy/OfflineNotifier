@@ -22,3 +22,4 @@ go.work
 *.env
 *.json
 logs/*.log
+.DS_Store
