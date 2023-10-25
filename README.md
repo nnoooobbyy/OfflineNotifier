@@ -48,6 +48,11 @@ INVITE_LINK=(invite link for your bot here)
 ```
 - empty logs folder
 
+To do this, open a Terminal window and run:
+
+1. `cp data.json.example data.json`
+2. `cp OfflineNotifier.env.example OfflineNotifier.env` 
+
 ### Usage
 
 The below example shows how to start the bot from the OfflineNotifier folder.
