@@ -20,7 +20,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.5 | GOLANG"
+	botVersion        = "V7.5 D | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
@@ -1413,7 +1413,7 @@ func queueHandler(s *discordgo.Session) {
 	}
 }
 
-// loops forever; goes through active guild list and checks for new bots,
+// goes through active guild list and checks for new bots,
 // requests presence list of bots, and culls removed bots.
 func requestBots(s *discordgo.Session) {
 	// get guild map
@@ -1437,6 +1437,9 @@ func requestBots(s *discordgo.Session) {
 		_, err := s.Guild(GID)
 		if err != nil {
 			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err)
+			if err == errors.New("HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}") {
+				logMessage(s, "You can remove!")
+			}
 			continue
 		}
 
