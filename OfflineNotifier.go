@@ -20,7 +20,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.5 D | GOLANG"
+	botVersion        = "V7.6 | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
@@ -1436,9 +1436,9 @@ func requestBots(s *discordgo.Session) {
 		// check if OfflineNotifier is still in guild
 		_, err := s.Guild(GID)
 		if err != nil {
-			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err)
-			if err == errors.New("HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}") {
-				logMessage(s, "You can remove!")
+			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err, "| removing guild...")
+			if fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
+				addToQueue("rg", [4]string{GID})
 			}
 			continue
 		}
