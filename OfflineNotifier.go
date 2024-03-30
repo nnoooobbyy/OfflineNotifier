@@ -20,7 +20,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.6 | GOLANG"
+	botVersion        = "V7.7 | GOLANG"
 	actionQueue       []Request
 	startTime         = time.Now().Unix()
 	startedCoroutines = false
