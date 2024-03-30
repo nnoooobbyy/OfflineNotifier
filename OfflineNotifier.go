@@ -160,11 +160,6 @@ func main() {
 				Type:        discordgo.ChatApplicationCommand,
 			},
 			{
-				Name:        "shutdown",
-				Description: "Shuts down OfflineNotifier",
-				Type:        discordgo.ChatApplicationCommand,
-			},
-			{
 				Name:        "stats",
 				Description: "Shows stats about OfflineNotifier",
 				Type:        discordgo.ChatApplicationCommand,
@@ -205,21 +200,10 @@ func main() {
 	}
 
 	// write commands
-	createdCommands, err := discord.ApplicationCommandBulkOverwrite(discord.State.User.ID, "", commands)
+	_, err = discord.ApplicationCommandBulkOverwrite(discord.State.User.ID, "", commands)
 	if err != nil {
 		log.Println("[COMMAND WRITE] error writing commands |", err)
 		os.Exit(1)
-	}
-
-	for _, command := range createdCommands {
-		if command.Name == "shutdown" {
-			appID := command.ApplicationID
-			cmdID := command.ID
-			GID := command.GuildID
-			permissions := []*discordgo.ApplicationCommandPermissions{{ID: ownerID, Type: 2, Permission: true}}
-			permissionsList := discordgo.ApplicationCommandPermissionsList{Permissions: permissions}
-			discord.ApplicationCommandPermissionsEdit(appID, GID, cmdID, &permissionsList)
-		}
 	}
 
 	// wait here until CTRL-C or other term signal is received
@@ -424,7 +408,6 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 // - subscribe [bot]
 // - unsubscribe [bot]
 // privacy
-// shutdown
 // stats
 // support
 // watch
@@ -455,8 +438,6 @@ func commandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 	case "privacy":
 		privacy(s, i)
-	case "shutdown":
-		shutdown(s, i)
 	case "stats":
 		stats(s, i)
 	case "support":
@@ -640,19 +621,6 @@ func privacy(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	responseData := &discordgo.InteractionResponseData{Embeds: embed}
 	response := &discordgo.InteractionResponse{Type: 4, Data: responseData}
 	go s.InteractionRespond(i.Interaction, response)
-}
-
-func shutdown(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	embed := []*discordgo.MessageEmbed{
-		{
-			Title: "Shutting down...",
-			Color: defaultColor,
-		},
-	}
-	responseData := &discordgo.InteractionResponseData{Embeds: embed}
-	response := &discordgo.InteractionResponse{Type: 4, Data: responseData}
-	go s.InteractionRespond(i.Interaction, response)
-	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 }
 
 // shows stats about OfflineNotifier
@@ -1439,6 +1407,7 @@ func requestBots(s *discordgo.Session) {
 			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err, "| removing guild...")
 			if fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
 				addToQueue("rg", [4]string{GID})
+				// logMessage(s, "not removing")
 			}
 			continue
 		}
