@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -20,10 +19,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "V7.7 | GOLANG"
-	actionQueue       []Request
-	startTime         = time.Now().Unix()
-	startedCoroutines = false
+	botVersion        = "8.0@GO1.22.1"
 	inviteLink        = ""
 	ownerID           = ""
 	defaultColor      = 0x7289da
@@ -31,6 +27,9 @@ var (
 	failColor         = 0xe06c6c
 	onlineColor       = 0x43b581
 	offlineColor      = 0x727c8a
+	actionQueue       []Request
+	startedCoroutines = false
+	startTime         = time.Now().Unix()
 )
 
 // ----- STRUCTS
@@ -58,7 +57,7 @@ type Subscriber struct {
 	Bots []string `json:"bots"`
 }
 
-// -----  MAIN
+// -----  RUN
 func main() {
 	// LOGGING
 	f, err := os.OpenFile("./logs/"+time.Now().Format("2006-01-02 15:04:05 MST")+".log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
@@ -217,7 +216,7 @@ func main() {
 	discord.Close()
 }
 
-// ----- BOT EVENTS
+// ----- EVENTS
 
 // called when OfflineNotifier connects to discord
 func connect(s *discordgo.Session, event *discordgo.Connect) {
@@ -257,13 +256,13 @@ func resumed(s *discordgo.Session, event *discordgo.Resumed) {
 
 // called when OfflineNotifier receives GuildMembersChunk
 func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
-	botMap, err := getBotMap(s)
+	botMap, err := getJsonBotMap()
 	if err != nil {
 		logMessage(s, "[CHECK OFFLINE] error getting bot map |", err)
 		return
 	}
 
-	guild, err := getGuild(s, event.GuildID)
+	guild, err := getJsonGuild(event.GuildID)
 	if err != nil {
 		logMessage(s, "[CHECK OFFLINE] error getting json guild |", err)
 		return
@@ -275,7 +274,12 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 			logMessage(s, "[CHECK OFFLINE] error getting discord bot |", err)
 			continue
 		}
-		currentStatus := findStatus(event.Presences, BID)
+		currentStatus := "offline"
+		for _, p := range event.Presences {
+			if p.User.ID == BID {
+				currentStatus = string(p.Status)
+			}
+		}
 		if botMap[BID].Status != currentStatus {
 			if botMap[BID].Status == "offline" || currentStatus == "offline" {
 				addToQueue("ss", [4]string{BID, currentStatus, "true"})
@@ -303,7 +307,7 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 				}
 				// notify servers
 				for _, GID := range botMap[BID].Guilds {
-					notifyGuild, err := getGuild(s, GID)
+					notifyGuild, err := getJsonGuild(GID)
 					if err != nil {
 						log.Println("[CHECK OFFLINE] error getting notify guild |", err)
 						continue
@@ -331,13 +335,17 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 	if err != nil {
 		logMessage(s, "[REACTION] error getting message |", err)
 	}
+	
+	if message.Author.ID != s.State.User.ID {
+		return
+	}
 
 	user, err := s.User(event.UserID)
 	if err != nil {
 		logMessage(s, "[REACTION] error getting discord user |", err)
 	}
 
-	if message.Embeds != nil && user.ID != s.State.User.ID {
+	if message.Embeds[0] != nil && user.ID != s.State.User.ID {
 		if strings.Contains(message.Embeds[0].Title, "'s subscriptions") || strings.Contains(message.Embeds[0].Title, "Bots being watched in ") {
 			// get bot list
 			var bots []string
@@ -345,7 +353,7 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 				// subscriber
 				userName := strings.Replace(message.Embeds[0].Title, "'s subscriptions", "", 1)
 				if user.Username == userName {
-					subscriber, err := getSubscriber(s, user.ID)
+					subscriber, err := getJsonSubscriber(user.ID)
 					if err != nil {
 						logMessage(s, "[REACTION] error getting json subscriber |", err)
 						return
@@ -356,7 +364,7 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 				}
 			} else {
 				// guild
-				guild, err := getGuild(s, event.GuildID)
+				guild, err := getJsonGuild(event.GuildID)
 				if err != nil {
 					logMessage(s, "[REACTION] error getting json guild |", err)
 					return
@@ -399,7 +407,7 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 	}
 }
 
-// ----- BOT COMMANDS
+// ----- COMMANDS
 // invite
 // list
 // - server
@@ -504,7 +512,7 @@ func listServer(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		logMessage(s, "[LIST SERVER] error getting discord guild |", err)
 		return
 	}
-	guild, err := getGuild(s, discordGuild.ID)
+	guild, err := getJsonGuild(discordGuild.ID)
 	if err != nil {
 		embeds := []*discordgo.MessageEmbed{
 			{
@@ -561,7 +569,7 @@ func listSubscriptions(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	} else {
 		user = i.Member.User
 	}
-	subscriber, err := getSubscriber(s, user.ID)
+	subscriber, err := getJsonSubscriber(user.ID)
 	if err != nil {
 		embeds := []*discordgo.MessageEmbed{
 			{
@@ -627,7 +635,7 @@ func privacy(s *discordgo.Session, i *discordgo.InteractionCreate) {
 func stats(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	// calculate totals
 	totalServers := int64(len(s.State.Guilds))
-	guilds, err := getGuildMap(s)
+	guilds, err := getJsonGuildMap()
 	if err != nil {
 		logMessage(s, "[STATS] error getting guild map |", err)
 	}
@@ -738,34 +746,11 @@ func unsubscribe(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	go s.InteractionRespond(i.Interaction, response)
 }
 
-// ----- ARRAY FUNCTIONS
-
-// looks through a discord presence array for a matching ID, returns the Status
-func findStatus(presenceList []*discordgo.Presence, userID string) string {
-	for _, p := range presenceList {
-		if p.User.ID == userID {
-			return string(p.Status)
-		}
-	}
-	return "offline"
-}
-
-// looks through an ID array to find the matching ID, returns the index
-func indexID(array []string, ID string) (i int, err error) {
-	for i = range array {
-		if array[i] == ID {
-			return
-		}
-	}
-	err = errors.New("not in list")
-	return
-}
-
-// ----- MAP FUNCTIONS
+// ----- JSON MAP FUNCTIONS
 
 // reads from a json file and returns a specific bot
-func getBot(s *discordgo.Session, BID string) (bot Bot, err error) {
-	jsonData, err := ioutil.ReadFile("data.json")
+func getJsonBot(BID string) (bot Bot, err error) {
+	jsonData, err := os.ReadFile("data.json")
 	if err != nil {
 		return
 	}
@@ -802,8 +787,8 @@ func getBot(s *discordgo.Session, BID string) (bot Bot, err error) {
 }
 
 // reads from a json file and returns a bot map
-func getBotMap(s *discordgo.Session) (botMap map[string]Bot, err error) {
-	jsonData, err := ioutil.ReadFile("data.json")
+func getJsonBotMap() (botMap map[string]Bot, err error) {
+	jsonData, err := os.ReadFile("data.json")
 	if err != nil {
 		return
 	}
@@ -840,8 +825,8 @@ func getBotMap(s *discordgo.Session) (botMap map[string]Bot, err error) {
 }
 
 // reads from a json file and returns a specific guild
-func getGuild(s *discordgo.Session, GID string) (guild Guild, err error) {
-	jsonData, err := ioutil.ReadFile("data.json")
+func getJsonGuild(GID string) (guild Guild, err error) {
+	jsonData, err := os.ReadFile("data.json") // TODO
 	if err != nil {
 		return
 	}
@@ -870,8 +855,8 @@ func getGuild(s *discordgo.Session, GID string) (guild Guild, err error) {
 }
 
 // reads from a json file and returns a guild map
-func getGuildMap(s *discordgo.Session) (guildMap map[string]Guild, err error) {
-	jsonData, err := ioutil.ReadFile("data.json")
+func getJsonGuildMap() (guildMap map[string]Guild, err error) {
+	jsonData, err := os.ReadFile("data.json")
 	if err != nil {
 		return
 	}
@@ -900,8 +885,8 @@ func getGuildMap(s *discordgo.Session) (guildMap map[string]Guild, err error) {
 }
 
 // reads from a json file and returns a subscriber
-func getSubscriber(s *discordgo.Session, SID string) (subscriber Subscriber, err error) {
-	jsonData, err := ioutil.ReadFile("data.json")
+func getJsonSubscriber(SID string) (subscriber Subscriber, err error) {
+	jsonData, err := os.ReadFile("data.json")
 	if err != nil {
 		return
 	}
@@ -929,8 +914,8 @@ func getSubscriber(s *discordgo.Session, SID string) (subscriber Subscriber, err
 }
 
 // reads from a json file and returns a subscriber map
-func getSubscriberMap(s *discordgo.Session) (subscriberMap map[string]Subscriber, err error) {
-	jsonData, err := ioutil.ReadFile("data.json")
+func getJsonSubscriberMap() (subscriberMap map[string]Subscriber, err error) {
+	jsonData, err := os.ReadFile("data.json")
 	if err != nil {
 		return
 	}
@@ -961,6 +946,17 @@ func getSubscriberMap(s *discordgo.Session) (subscriberMap map[string]Subscriber
 func addToQueue(action string, data [4]string) {
 	request := Request{action, data}
 	actionQueue = append(actionQueue, request)
+}
+
+// looks through an ID array to find the matching ID, returns the index
+func indexID(array []string, ID string) (i int, err error) {
+	for i = range array {
+		if array[i] == ID {
+			return
+		}
+	}
+	err = errors.New("not in list")
+	return
 }
 
 // calculate time delta
@@ -1001,16 +997,6 @@ func sendEmbed(s *discordgo.Session, CID string, embed *discordgo.MessageEmbed) 
 	}
 }
 
-func getDiscordBot(s *discordgo.Session, bot Bot) (discordBot *discordgo.Member, err error) {
-	for _, GID := range bot.Guilds {
-		discordBot, err = s.GuildMember(GID, bot.ID)
-		if err == nil {
-			break
-		}
-	}
-	return
-}
-
 // makes list for bot embed
 func makeBotList(s *discordgo.Session, embed *discordgo.MessageEmbed, bots []string, page int) error {
 	pageStart := ((page - 1) * 8)
@@ -1023,13 +1009,19 @@ func makeBotList(s *discordgo.Session, embed *discordgo.MessageEmbed, bots []str
 	}
 
 	for _, BID := range bots[pageStart:pageEnd] {
-		bot, err := getBot(s, BID)
+		bot, err := getJsonBot(BID)
 		if err != nil {
 			logMessage(s, "[MAKE BOT LIST] error getting json bot |", err)
 			return err
 		}
 
-		discordBot, err := getDiscordBot(s, bot)
+		var discordBot *discordgo.Member
+		for _, GID := range bot.Guilds {
+			discordBot, err = s.GuildMember(GID, bot.ID)
+			if err == nil {
+				break
+			}
+		}
 		if err != nil {
 			logMessage(s, "[MAKE BOT LIST] error getting discord bot |", err)
 			return err
@@ -1057,21 +1049,21 @@ func makeBotList(s *discordgo.Session, embed *discordgo.MessageEmbed, bots []str
 func queueHandler(s *discordgo.Session) {
 	if len(actionQueue) > 0 {
 		// get guild map
-		guildMap, err := getGuildMap(s)
+		guildMap, err := getJsonGuildMap()
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error getting guild map |", err)
 			return
 		}
 
 		// get bot map
-		botMap, err := getBotMap(s)
+		botMap, err := getJsonBotMap()
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error getting bot map |", err)
 			return
 		}
 
 		// get subscriber map
-		subscriberMap, err := getSubscriberMap(s)
+		subscriberMap, err := getJsonSubscriberMap()
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error getting subscriber map |", err)
 			return
@@ -1374,7 +1366,7 @@ func queueHandler(s *discordgo.Session) {
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error marshaling json |", err)
 		}
-		ioutil.WriteFile("data.json", jsonData, 0755)
+		os.WriteFile("data.json", jsonData, 0755)
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error writing json |", err)
 		}
@@ -1385,14 +1377,14 @@ func queueHandler(s *discordgo.Session) {
 // requests presence list of bots, and culls removed bots.
 func requestBots(s *discordgo.Session) {
 	// get guild map
-	guildMap, err := getGuildMap(s)
+	guildMap, err := getJsonGuildMap()
 	if err != nil {
 		logMessage(s, "[REQUEST BOTS] error getting guild map |", err)
 		return
 	}
 
 	// update presence
-	botMap, err := getBotMap(s)
+	botMap, err := getJsonBotMap()
 	if err != nil {
 		logMessage(s, "[REQUEST BOTS] error getting bot map |", err)
 		return
