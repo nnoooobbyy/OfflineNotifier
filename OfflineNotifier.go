@@ -19,7 +19,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "8.1@GO1.22.1"
+	botVersion        = "8.2@GO1.22.1"
 	inviteLink        = ""
 	ownerID           = ""
 	defaultColor      = 0x7289da
@@ -338,7 +338,7 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 		}
 		return
 	}
-	
+
 	if message.Author.ID != s.State.User.ID {
 		return
 	}
@@ -1402,18 +1402,18 @@ func requestBots(s *discordgo.Session) {
 	for GID, guild := range guildMap {
 		// check if OfflineNotifier is still in guild
 		_, err := s.Guild(GID)
-		if err != nil {
+		if err != nil && fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
 			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err, "| removing guild...")
-			if fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
-				addToQueue("rg", [4]string{GID})
-			}
+			addToQueue("rg", [4]string{GID})
 			continue
 		}
 
 		// check if OfflineNotifier is still in channel
 		_, err = s.Channel(guild.CID)
-		if err != nil {
-			logMessage(s, "[REQUEST BOTS] error setting message channel |", err, "| removing guild...")
+		if err != nil &&
+			(fmt.Sprintln(err) == "HTTP 403 Forbidden, {\"message\": \"Missing Access\", \"code\": 50001}\n" ||
+				fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Channel\", \"code\": 10003}\n") {
+			logMessage(s, "[REQUEST BOTS] error getting message channel |", err, "| removing guild...")
 			addToQueue("rg", [4]string{guild.ID})
 			continue
 		}
