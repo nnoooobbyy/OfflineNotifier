@@ -19,7 +19,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "8.0@GO1.22.1"
+	botVersion        = "8.1@GO1.22.1"
 	inviteLink        = ""
 	ownerID           = ""
 	defaultColor      = 0x7289da
@@ -333,7 +333,10 @@ func checkOffline(s *discordgo.Session, event *discordgo.GuildMembersChunk) {
 func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 	message, err := s.ChannelMessage(event.ChannelID, event.MessageID)
 	if err != nil {
-		logMessage(s, "[REACTION] error getting message |", err)
+		if fmt.Sprintln(err) != "HTTP 403 Forbidden, {\"message\": \"Missing Access\", \"code\": 50001}\n" {
+			logMessage(s, "[REACTION] error getting message |", err)
+		}
+		return
 	}
 	
 	if message.Author.ID != s.State.User.ID {
@@ -343,6 +346,7 @@ func reaction(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 	user, err := s.User(event.UserID)
 	if err != nil {
 		logMessage(s, "[REACTION] error getting discord user |", err)
+		return
 	}
 
 	if message.Embeds[0] != nil && user.ID != s.State.User.ID {
@@ -638,6 +642,7 @@ func stats(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	guilds, err := getJsonGuildMap()
 	if err != nil {
 		logMessage(s, "[STATS] error getting guild map |", err)
+		return
 	}
 
 	totalActive := int64(len(guilds))
@@ -1365,10 +1370,12 @@ func queueHandler(s *discordgo.Session) {
 		jsonData, err := json.Marshal(map[string]interface{}{"guilds": guildMap, "bots": botMap, "subscribers": subscriberMap})
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error marshaling json |", err)
+			return
 		}
-		os.WriteFile("data.json", jsonData, 0755)
+		err = os.WriteFile("data.json", jsonData, 0755)
 		if err != nil {
 			logMessage(s, "[QUEUE HANDLER] error writing json |", err)
+			return
 		}
 	}
 }
@@ -1399,7 +1406,6 @@ func requestBots(s *discordgo.Session) {
 			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err, "| removing guild...")
 			if fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
 				addToQueue("rg", [4]string{GID})
-				// logMessage(s, "not removing")
 			}
 			continue
 		}
