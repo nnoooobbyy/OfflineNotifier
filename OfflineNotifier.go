@@ -19,7 +19,7 @@ import (
 
 // ----- VARS
 var (
-	botVersion        = "8.2@GO1.22.1"
+	botVersion        = "8.3@GO1.22.1"
 	inviteLink        = ""
 	ownerID           = ""
 	defaultColor      = 0x7289da
@@ -86,9 +86,6 @@ func main() {
 
 	// REGISTER CALLBACKS
 	discord.AddHandler(ready)
-	discord.AddHandler(connect)
-	discord.AddHandler(disconnect)
-	discord.AddHandler(resumed)
 	discord.AddHandler(commandHandler)
 	discord.AddHandler(checkOffline)
 	discord.AddHandler(reaction)
@@ -218,16 +215,6 @@ func main() {
 
 // ----- EVENTS
 
-// called when OfflineNotifier connects to discord
-func connect(s *discordgo.Session, event *discordgo.Connect) {
-	log.Println("[CONNECTED]")
-}
-
-// called when OfflineNotifier gets disconnected from discord
-func disconnect(s *discordgo.Session, event *discordgo.Disconnect) {
-	log.Println("[DISCONNECTED]")
-}
-
 // called when discord responds with the ready event
 func ready(s *discordgo.Session, event *discordgo.Ready) {
 	log.Println("[READY]")
@@ -247,11 +234,6 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 		}()
 		startedCoroutines = true
 	}
-}
-
-// called when connection resumes
-func resumed(s *discordgo.Session, event *discordgo.Resumed) {
-	log.Println("[RESUMED]")
 }
 
 // called when OfflineNotifier receives GuildMembersChunk
@@ -1402,19 +1384,26 @@ func requestBots(s *discordgo.Session) {
 	for GID, guild := range guildMap {
 		// check if OfflineNotifier is still in guild
 		_, err := s.Guild(GID)
-		if err != nil && fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
-			logMessage(s, "[REQUEST BOTS] error getting discord guild |", err, "| removing guild...")
-			addToQueue("rg", [4]string{GID})
+		if err != nil {
+			errstr := fmt.Sprint("[REQUEST BOTS] error getting discord guild | ", err)
+			if fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Guild\", \"code\": 10004}\n" {
+				errstr += " | removing guild..."
+				addToQueue("rg", [4]string{GID})
+			}
+			logMessage(s, errstr)
 			continue
 		}
 
 		// check if OfflineNotifier is still in channel
 		_, err = s.Channel(guild.CID)
-		if err != nil &&
-			(fmt.Sprintln(err) == "HTTP 403 Forbidden, {\"message\": \"Missing Access\", \"code\": 50001}\n" ||
-				fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Channel\", \"code\": 10003}\n") {
-			logMessage(s, "[REQUEST BOTS] error getting message channel |", err, "| removing guild...")
-			addToQueue("rg", [4]string{guild.ID})
+		if err != nil {
+			errstr := fmt.Sprint("[REQUEST BOTS] error getting message channel | ", err)
+			if fmt.Sprintln(err) == "HTTP 403 Forbidden, {\"message\": \"Missing Access\", \"code\": 50001}\n" ||
+				fmt.Sprintln(err) == "HTTP 404 Not Found, {\"message\": \"Unknown Channel\", \"code\": 10003}\n" {
+				errstr += " | removing guild..."
+				addToQueue("rg", [4]string{guild.ID})
+			}
+			logMessage(s, errstr)
 			continue
 		}
 
